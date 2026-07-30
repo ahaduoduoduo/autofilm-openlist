@@ -14,6 +14,8 @@ are kept in small modules:
   standard directory and
   offline-download handlers are mounted only on explicit integration routes;
   virtual mount responses are generated locally without provider requests.
+  Refreshed object lookup reloads only the object's parent directory and
+  resolves the target from that provider result.
 - `server/handles/autofilm_jellyfin.go`: explicit administrator-requested path
   import or refresh in Jellyfin. OpenList filesystem mutations never call it.
 - `server/handles/autofilm_test.go`: virtual directory response coverage.

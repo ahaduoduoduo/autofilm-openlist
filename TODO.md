@@ -4,6 +4,9 @@ Updated: 2026-07-30
 
 ## Completed
 
+- [x] 2026-07-30: Make refreshed object lookup reload the exact parent
+  directory so completed offline-download results do not require a manual
+  OpenList browser refresh before Jellyfin import.
 - [x] 2026-07-30: Expose the final 115 offline-download result path so
   AutoFilm Core can import the exact object into Jellyfin instead of refreshing
   a month-level parent directory.

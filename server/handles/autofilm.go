@@ -1,6 +1,7 @@
 package handles
 
 import (
+	"context"
 	"fmt"
 	stdpath "path"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/OpenListTeam/OpenList/v4/internal/db"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
+	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/offline_download/tool"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
@@ -128,12 +130,49 @@ func AutoFilmGetObject(c *gin.Context) {
 		common.ErrorResp(c, err, 404)
 		return
 	}
-	obj, err := op.Get(c.Request.Context(), storage, actualPath)
+	obj, err := getAutoFilmObject(
+		c.Request.Context(),
+		storage,
+		actualPath,
+		req.Refresh,
+	)
 	if err != nil {
 		common.ErrorResp(c, err, 404)
 		return
 	}
 	common.SuccessResp(c, autoFilmObjectResponse(obj, fullPath))
+}
+
+func getAutoFilmObject(
+	ctx context.Context,
+	storage driver.Driver,
+	actualPath string,
+	refresh bool,
+) (model.Obj, error) {
+	if !refresh || actualPath == "/" {
+		return op.Get(ctx, storage, actualPath)
+	}
+
+	parentPath := stdpath.Dir(actualPath)
+	objects, err := op.List(ctx, storage, parentPath, model.ListArgs{
+		Refresh: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if obj := findAutoFilmObject(objects, stdpath.Base(actualPath)); obj != nil {
+		return obj, nil
+	}
+	return nil, errs.ObjectNotFound
+}
+
+func findAutoFilmObject(objects []model.Obj, name string) model.Obj {
+	for _, obj := range objects {
+		if obj.GetName() == name {
+			return obj
+		}
+	}
+	return nil
 }
 
 func AutoFilmListObjects(c *gin.Context) {

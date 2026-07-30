@@ -36,7 +36,7 @@ task-creation operations exposed to the dedicated service token.
 `POST /objects/get`
 
 ```json
-{"path":"/115/movie/title.mkv"}
+{"path":"/115/movie/title.mkv","refresh":false}
 ```
 
 The response contains provider-neutral data:
@@ -56,6 +56,12 @@ The response contains provider-neutral data:
 `download_path` is omitted for directories. Jellyfin combines it with the
 configured public OpenList URL for client playback and with the internal
 OpenList URL for serialized `ffprobe`.
+
+`refresh:true` refreshes only the object's provider-backed parent directory and
+resolves the object from that new listing. Jellyfin uses this after an offline
+task reaches its succeeded state so a stale OpenList directory cache cannot
+hide the newly created result. Normal playback and subtitle reads leave it
+disabled.
 
 ### List one directory
 

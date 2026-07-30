@@ -29,6 +29,21 @@ func TestAutoFilmVirtualListResponse(t *testing.T) {
 	}
 }
 
+func TestFindAutoFilmObjectUsesRefreshedDirectoryEntry(t *testing.T) {
+	objects := []model.Obj{
+		&model.Object{Name: "existing.mkv"},
+		&model.Object{Name: "completed-download", IsFolder: true},
+	}
+
+	found := findAutoFilmObject(objects, "completed-download")
+	if found == nil || found.GetName() != "completed-download" {
+		t.Fatalf("unexpected object: %+v", found)
+	}
+	if missing := findAutoFilmObject(objects, "missing"); missing != nil {
+		t.Fatalf("expected missing object, got %+v", missing)
+	}
+}
+
 func TestNormalizeAutoFilmJellyfinPath(t *testing.T) {
 	t.Parallel()
 
