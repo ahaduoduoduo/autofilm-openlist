@@ -23,7 +23,11 @@ are kept in small modules:
 - `server/router.go`: least-privilege `/api/autofilm` route registration and the
   administrator-compatible `/api/admin/autofilm` alias.
 - `internal/offline_download/tool/download.go`: idempotent provider-side task
-  removal shared by normal cancellation and AutoFilm short-deadline retries.
+  removal shared by normal cancellation and AutoFilm short-deadline retries;
+  it also retains the provider's final result name in task memory.
+- `server/handles/task.go`: adds `result_path` to completed offline-task
+  snapshots by joining the destination directory and final provider result
+  name. This path-only contract does not expose or persist provider object IDs.
 - `Dockerfile.autofilm`: builds the modified OpenList binary for the isolated
   integration image.
 

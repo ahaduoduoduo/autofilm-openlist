@@ -2,6 +2,7 @@ package handles
 
 import (
 	"math"
+	"path"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -28,6 +29,7 @@ type TaskInfo struct {
 	EndTime     *time.Time  `json:"end_time"`
 	TotalBytes  int64       `json:"total_bytes"`
 	Error       string      `json:"error"`
+	ResultPath  string      `json:"result_path,omitempty"`
 }
 
 func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
@@ -46,7 +48,7 @@ func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
 		creatorName = task.GetCreator().Username
 		creatorRole = task.GetCreator().Role
 	}
-	return TaskInfo{
+	info := TaskInfo{
 		ID:          task.GetID(),
 		Name:        task.GetName(),
 		Creator:     creatorName,
@@ -59,6 +61,14 @@ func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
 		TotalBytes:  task.GetTotalBytes(),
 		Error:       errMsg,
 	}
+	if downloadTask, ok := any(task).(*tool.DownloadTask); ok &&
+		downloadTask.ResultName != "" {
+		info.ResultPath = path.Join(
+			downloadTask.TempDir,
+			downloadTask.ResultName,
+		)
+	}
+	return info
 }
 
 func getTaskInfos[T task.TaskExtensionInfo](tasks []T) []TaskInfo {

@@ -27,6 +27,7 @@ type DownloadTask struct {
 	DeletePolicy      DeletePolicy `json:"delete_policy"`
 	Toolname          string       `json:"toolname"`
 	Status            string       `json:"-"`
+	ResultName        string       `json:"result_name,omitempty"`
 	Signal            chan int     `json:"-"`
 	GID               string       `json:"-"`
 	tool              Tool
@@ -181,6 +182,9 @@ func (t *DownloadTask) Update() (bool, error) {
 	t.callStatusRetried = 0
 	t.SetProgress(info.Progress)
 	t.SetTotalBytes(info.TotalBytes)
+	if info.ResultName != "" {
+		t.ResultName = info.ResultName
+	}
 	t.Status = fmt.Sprintf("[%s]: %s", t.tool.Name(), info.Status)
 	if info.NewGID != "" {
 		log.Debugf("followen by: %+v", info.NewGID)

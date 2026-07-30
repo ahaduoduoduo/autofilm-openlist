@@ -4,6 +4,9 @@ Updated: 2026-07-30
 
 ## Completed
 
+- [x] 2026-07-30: Expose the final 115 offline-download result path so
+  AutoFilm Core can import the exact object into Jellyfin instead of refreshing
+  a month-level parent directory.
 - [x] 2026-07-28: Reduce the Jellyfin-facing object contract to absolute paths;
   storage IDs and provider object IDs remain internal.
 - [x] 2026-07-28: Add path lookup, bounded directory listing, direct upload,

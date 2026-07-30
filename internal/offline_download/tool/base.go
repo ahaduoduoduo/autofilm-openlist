@@ -18,6 +18,7 @@ type Status struct {
 	TotalBytes int64
 	Progress   float64
 	NewGID     string
+	ResultName string
 	Completed  bool
 	Status     string
 	Err        error

@@ -152,7 +152,10 @@ require a forced login.
 
 `GET /offline-tasks` returns the current in-memory download and transfer task
 snapshot. It does not list storage objects or call 115. AutoFilm Core uses this
-endpoint for progress updates.
+endpoint for progress updates. For a completed 115 download, `result_path`
+contains the destination directory joined with the final name reported by 115.
+It is omitted until the provider has returned that name. No provider object ID
+is exposed.
 
 `POST /offline-tasks/delete` accepts `{"task_id":"..."}` for a download task
 created through `/offline-downloads`. It cancels the OpenList task and removes
