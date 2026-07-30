@@ -1,6 +1,6 @@
 # AutoFilm development status
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 
 ## Completed
 
@@ -22,8 +22,9 @@ Updated: 2026-07-29
   snapshot for AutoFilm Core progress tracking.
 - [x] 2026-07-29: Add a task-scoped cancellation endpoint that removes the
   provider-side 115 offline task without deleting destination objects.
-- [x] 2026-07-30: Add a machine-readable 115 credential health check for
-  channel-neutral administrator notifications.
+- [x] 2026-07-30: Record real 115 HTTP 405 responses as a persistent,
+  machine-readable risk-control state. State reads do not contact 115; QR
+  authentication or a later successful provider request clears the marker.
 
 ## Planned
 

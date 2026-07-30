@@ -301,6 +301,12 @@ func AutoFilmGetStorageAuthQRCode(c *gin.Context) {
 }
 
 func AutoFilmGetStorageAuthHealth(c *gin.Context) {
+	// Compatibility alias. This endpoint intentionally returns the passive
+	// state and must never issue a request to the storage provider.
+	AutoFilmGetStorageAuthState(c)
+}
+
+func AutoFilmGetStorageAuthState(c *gin.Context) {
 	storageID, err := strconv.ParseUint(c.Query("storage_id"), 10, 64)
 	if err != nil || storageID == 0 {
 		common.ErrorStrResp(c, "invalid storage_id", 400)
@@ -310,12 +316,12 @@ func AutoFilmGetStorageAuthHealth(c *gin.Context) {
 	if !ok {
 		return
 	}
-	provider, ok := storage.(driver.AutoFilmAuthHealthProvider)
+	provider, ok := storage.(driver.AutoFilmAuthStateProvider)
 	if !ok {
-		common.ErrorStrResp(c, "storage does not expose authentication health", 400)
+		common.ErrorStrResp(c, "storage does not expose authentication state", 400)
 		return
 	}
-	common.SuccessResp(c, provider.CheckAutoFilmAuth(c.Request.Context()))
+	common.SuccessResp(c, provider.GetAutoFilmAuthState())
 }
 
 func AutoFilmGetScheduler(c *gin.Context) {

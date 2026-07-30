@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
@@ -17,11 +18,14 @@ import (
 type Pan115 struct {
 	model.Storage
 	Addition
-	client       *driver115.Pan115Client
-	scheduler    *accountScheduler
-	appVerOnce   sync.Once
-	authMu       sync.Mutex
-	authSessions map[string]*authSession
+	client         *driver115.Pan115Client
+	scheduler      *accountScheduler
+	appVerOnce     sync.Once
+	authMu         sync.Mutex
+	authSessions   map[string]*authSession
+	healthMu       sync.RWMutex
+	riskDetectedAt time.Time
+	riskMessage    string
 }
 
 func (d *Pan115) Config() driver.Config {
@@ -154,7 +158,12 @@ func (d *Pan115) Remove(ctx context.Context, obj model.Obj) error {
 	return d.client.Delete(obj.GetID())
 }
 
-func (d *Pan115) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) (model.Obj, error) {
+func (d *Pan115) Put(
+	ctx context.Context,
+	dstDir model.Obj,
+	stream model.FileStreamer,
+	up driver.UpdateProgress,
+) (model.Obj, error) {
 	release, err := d.scheduler.acquireUpload(ctx)
 	if err != nil {
 		return nil, err
@@ -219,11 +228,13 @@ func (d *Pan115) Put(ctx context.Context, dstDir model.Obj, stream model.FileStr
 	// 闪传失败，上传
 	if stream.GetSize() <= 10*utils.MB { // 文件大小小于10MB，改用普通模式上传
 		if uploadResult, err = d.UploadByOSS(ctx, &fastInfo.UploadOSSParams, stream, dirID, up); err != nil {
+			d.observeProviderError(err)
 			return nil, err
 		}
 	} else {
 		// 分片上传
 		if uploadResult, err = d.UploadByMultipart(ctx, &fastInfo.UploadOSSParams, stream.GetSize(), stream, dirID, up); err != nil {
+			d.observeProviderError(err)
 			return nil, err
 		}
 	}

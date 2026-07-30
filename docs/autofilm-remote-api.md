@@ -1,6 +1,6 @@
 # AutoFilm remote API
 
-Updated: 2026-07-28
+Updated: 2026-07-30
 
 ## Purpose and trust boundary
 
@@ -138,9 +138,17 @@ model:
 - `POST /auth-sessions` starts or reuses an unexpired QR session.
 - `GET /auth-sessions/status` returns only session state and expiry.
 - `GET /auth-sessions/qrcode.png` returns the QR image.
-- `GET /auth-health?storage_id=...` performs one explicit provider credential
-  check and returns `authenticated`, `checked_at`, and an optional error message.
+- `GET /auth-state?storage_id=...` returns the last known authentication state
+  stored by OpenList. It never contacts 115.
+- `GET /auth-health?storage_id=...` is a compatibility alias for the same
+  passive state and also never contacts 115.
 - `GET /scheduler` returns non-sensitive request and concurrency counters.
+
+The driver records a risk-control marker only when a real 115 operation returns
+HTTP 405. It does not run a periodic Cookie check. A confirmed QR login replaces
+the Cookie and clears the marker. A later successful response from the normal
+115 client also clears the marker, so temporary provider recovery does not
+require a forced login.
 
 `GET /offline-tasks` returns the current in-memory download and transfer task
 snapshot. It does not list storage objects or call 115. AutoFilm Core uses this

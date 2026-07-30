@@ -1,6 +1,7 @@
 package handles
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -113,5 +114,74 @@ func TestRequestAutoFilmJellyfinRefresh(t *testing.T) {
 	response, ok := result.(map[string]any)
 	if !ok || response["action"] != "created" {
 		t.Fatalf("unexpected response: %#v", result)
+	}
+}
+
+func TestOpenListPathFromJellyfinLocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value string
+		want  string
+		ok    bool
+	}{
+		{value: "openlist:///115/movie", want: "/115/movie", ok: true},
+		{value: "openlist://115/movie", want: "/115/movie", ok: true},
+		{value: "/movie", ok: false},
+	}
+	for _, test := range tests {
+		got, ok := openListPathFromJellyfinLocation(test.value)
+		if ok != test.ok || got != test.want {
+			t.Fatalf(
+				"location %q: got (%q, %v), want (%q, %v)",
+				test.value,
+				got,
+				ok,
+				test.want,
+				test.ok,
+			)
+		}
+	}
+}
+
+func TestRequestAutoFilmJellyfinPathStatus(t *testing.T) {
+	var receivedAuthorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuthorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"Name":"Movies","Locations":["openlist:///115/movie"]},
+			{"Name":"Local","Locations":["/movie"]}
+		]`))
+	}))
+	defer server.Close()
+
+	t.Setenv(autoFilmJellyfinURLEnvironment, server.URL)
+	t.Setenv(autoFilmJellyfinAPIKeyEnvironment, "test-api-key")
+	status, err := requestAutoFilmJellyfinPathStatus(
+		context.Background(),
+		"/115/movie/title",
+	)
+	if err != nil {
+		t.Fatalf("request path status: %v", err)
+	}
+	if !status.Configured ||
+		status.LibraryName != "Movies" ||
+		status.MatchingRoot != "/115/movie" {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+	if !strings.Contains(receivedAuthorization, `Token="test-api-key"`) {
+		t.Fatalf("unexpected authorization %q", receivedAuthorization)
+	}
+
+	status, err = requestAutoFilmJellyfinPathStatus(
+		context.Background(),
+		"/115/not-configured",
+	)
+	if err != nil {
+		t.Fatalf("request unconfigured path status: %v", err)
+	}
+	if status.Configured || status.Message == "" {
+		t.Fatalf("unexpected unconfigured status: %+v", status)
 	}
 }

@@ -138,8 +138,9 @@ against regular OpenList filesystem or administrator routes. Storage cookies
 never leave OpenList. AutoFilm Core can cancel one integration-created download
 task and remove its provider-side 115 task before trying another magnet; this
 operation cannot delete destination files. 115 requests also pass through the
-account scheduler. An explicit credential health endpoint lets Core detect an
-expired 115 login without parsing provider error text. See
+account scheduler. Real 115 HTTP 405 responses create a persistent risk-control
+marker. Reading that marker never contacts 115; QR authentication or a later
+successful provider request clears it. See
 [docs/autofilm-remote-api.md](docs/autofilm-remote-api.md) for the protocol and
 safety boundaries, and [DETAILS.md](DETAILS.md) for the modified modules.
 

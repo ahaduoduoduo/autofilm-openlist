@@ -22,18 +22,21 @@ type AutoFilmAuthProvider interface {
 	GetAutoFilmAuthQRCode(sessionID string) ([]byte, error)
 }
 
-// AutoFilmAuthHealth is an explicit provider credential check. The API layer
-// returns this machine-readable result instead of asking callers to interpret
-// provider error text.
-type AutoFilmAuthHealth struct {
-	Authenticated bool      `json:"authenticated"`
-	CheckedAt     time.Time `json:"checked_at"`
-	Message       string    `json:"message,omitempty"`
+// AutoFilmAuthState is a passive credential state snapshot. Reading this
+// value must not contact the storage provider.
+type AutoFilmAuthState struct {
+	Authenticated            bool       `json:"authenticated"`
+	State                    string     `json:"state"`
+	RequiresReauthentication bool       `json:"requires_reauthentication"`
+	StatusCode               int        `json:"status_code,omitempty"`
+	DetectedAt               *time.Time `json:"detected_at,omitempty"`
+	Message                  string     `json:"message,omitempty"`
 }
 
-// AutoFilmAuthHealthProvider verifies the current storage credential.
-type AutoFilmAuthHealthProvider interface {
-	CheckAutoFilmAuth(ctx context.Context) AutoFilmAuthHealth
+// AutoFilmAuthStateProvider exposes the last known credential state without
+// issuing a provider request.
+type AutoFilmAuthStateProvider interface {
+	GetAutoFilmAuthState() AutoFilmAuthState
 }
 
 // AutoFilmSchedulerSnapshot contains non-sensitive scheduler diagnostics.

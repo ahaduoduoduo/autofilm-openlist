@@ -2,6 +2,7 @@ package handles
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,6 +39,19 @@ type autoFilmJellyfinRefreshReq struct {
 	ForceProbe bool   `json:"force_probe"`
 }
 
+type autoFilmJellyfinVirtualFolder struct {
+	Name      string   `json:"Name"`
+	Locations []string `json:"Locations"`
+}
+
+type AutoFilmJellyfinPathStatusResp struct {
+	Path         string `json:"path"`
+	Configured   bool   `json:"configured"`
+	LibraryName  string `json:"library_name,omitempty"`
+	MatchingRoot string `json:"matching_root,omitempty"`
+	Message      string `json:"message,omitempty"`
+}
+
 // AutoFilmScanJellyfin explicitly asks Jellyfin to import or refresh one
 // OpenList path. Normal OpenList filesystem mutations never call this handler.
 func AutoFilmScanJellyfin(c *gin.Context) {
@@ -53,6 +67,19 @@ func AutoFilmScanJellyfin(c *gin.Context) {
 		return
 	}
 
+	status, err := requestAutoFilmJellyfinPathStatus(
+		c.Request.Context(),
+		cleanPath,
+	)
+	if err != nil {
+		common.ErrorResp(c, err, http.StatusBadGateway)
+		return
+	}
+	if !status.Configured {
+		common.ErrorStrResp(c, status.Message, http.StatusConflict)
+		return
+	}
+
 	result, err := requestAutoFilmJellyfinRefresh(
 		c,
 		cleanPath,
@@ -63,6 +90,25 @@ func AutoFilmScanJellyfin(c *gin.Context) {
 		return
 	}
 	common.SuccessResp(c, result)
+}
+
+// AutoFilmGetJellyfinPathStatus checks only Jellyfin's configured library
+// roots. It does not list the selected OpenList directory.
+func AutoFilmGetJellyfinPathStatus(c *gin.Context) {
+	cleanPath, err := normalizeAutoFilmJellyfinPath(c.Query("path"))
+	if err != nil {
+		common.ErrorResp(c, err, http.StatusBadRequest)
+		return
+	}
+	status, err := requestAutoFilmJellyfinPathStatus(
+		c.Request.Context(),
+		cleanPath,
+	)
+	if err != nil {
+		common.ErrorResp(c, err, http.StatusBadGateway)
+		return
+	}
+	common.SuccessResp(c, status)
 }
 
 func normalizeAutoFilmJellyfinPath(value string) (string, error) {
@@ -84,19 +130,9 @@ func requestAutoFilmJellyfinRefresh(
 	cleanPath string,
 	req AutoFilmJellyfinScanReq,
 ) (any, error) {
-	baseURL := strings.TrimRight(
-		strings.TrimSpace(os.Getenv(autoFilmJellyfinURLEnvironment)),
-		"/",
-	)
-	apiKey := strings.TrimSpace(os.Getenv(
-		autoFilmJellyfinAPIKeyEnvironment,
-	))
-	if baseURL == "" || apiKey == "" {
-		return nil, fmt.Errorf(
-			"%s and %s must be configured",
-			autoFilmJellyfinURLEnvironment,
-			autoFilmJellyfinAPIKeyEnvironment,
-		)
+	baseURL, apiKey, err := autoFilmJellyfinConfiguration()
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := json.Marshal(autoFilmJellyfinRefreshReq{
@@ -117,13 +153,7 @@ func requestAutoFilmJellyfinRefresh(
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(
-		"Authorization",
-		`MediaBrowser Client="OpenList", Device="Server", `+
-			`DeviceId="autofilm-openlist", Version="1.0", Token="`+
-			strings.ReplaceAll(apiKey, `"`, "")+`"`,
-	)
+	setAutoFilmJellyfinHeaders(request, apiKey)
 
 	response, err := autoFilmJellyfinHTTPClient.Do(request)
 	if err != nil {
@@ -153,4 +183,109 @@ func requestAutoFilmJellyfinRefresh(
 		return nil, fmt.Errorf("decode Jellyfin response: %w", err)
 	}
 	return result, nil
+}
+
+func requestAutoFilmJellyfinPathStatus(
+	ctx context.Context,
+	cleanPath string,
+) (AutoFilmJellyfinPathStatusResp, error) {
+	result := AutoFilmJellyfinPathStatusResp{Path: cleanPath}
+	baseURL, apiKey, err := autoFilmJellyfinConfiguration()
+	if err != nil {
+		return result, err
+	}
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		baseURL+"/Library/VirtualFolders",
+		nil,
+	)
+	if err != nil {
+		return result, err
+	}
+	setAutoFilmJellyfinHeaders(request, apiKey)
+	response, err := autoFilmJellyfinHTTPClient.Do(request)
+	if err != nil {
+		return result, fmt.Errorf("request Jellyfin libraries: %w", err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(
+		response.Body,
+		autoFilmJellyfinResponseLimit,
+	))
+	if err != nil {
+		return result, fmt.Errorf("read Jellyfin libraries: %w", err)
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return result, fmt.Errorf(
+			"Jellyfin returned HTTP %d: %s",
+			response.StatusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
+	}
+	var libraries []autoFilmJellyfinVirtualFolder
+	if err := json.Unmarshal(responseBody, &libraries); err != nil {
+		return result, fmt.Errorf("decode Jellyfin libraries: %w", err)
+	}
+	for _, library := range libraries {
+		for _, location := range library.Locations {
+			root, ok := openListPathFromJellyfinLocation(location)
+			if !ok || !isPathWithinRoot(cleanPath, root) {
+				continue
+			}
+			result.Configured = true
+			result.LibraryName = library.Name
+			result.MatchingRoot = root
+			return result, nil
+		}
+	}
+	result.Message = fmt.Sprintf(
+		"OpenList path %q is not under a configured Jellyfin remote library root",
+		cleanPath,
+	)
+	return result, nil
+}
+
+func autoFilmJellyfinConfiguration() (string, string, error) {
+	baseURL := strings.TrimRight(
+		strings.TrimSpace(os.Getenv(autoFilmJellyfinURLEnvironment)),
+		"/",
+	)
+	apiKey := strings.TrimSpace(os.Getenv(
+		autoFilmJellyfinAPIKeyEnvironment,
+	))
+	if baseURL == "" || apiKey == "" {
+		return "", "", fmt.Errorf(
+			"%s and %s must be configured",
+			autoFilmJellyfinURLEnvironment,
+			autoFilmJellyfinAPIKeyEnvironment,
+		)
+	}
+	return baseURL, apiKey, nil
+}
+
+func setAutoFilmJellyfinHeaders(request *http.Request, apiKey string) {
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(
+		"Authorization",
+		`MediaBrowser Client="OpenList", Device="Server", `+
+			`DeviceId="autofilm-openlist", Version="1.0", Token="`+
+			strings.ReplaceAll(apiKey, `"`, "")+`"`,
+	)
+}
+
+func openListPathFromJellyfinLocation(value string) (string, bool) {
+	const prefix = "openlist://"
+	if !strings.HasPrefix(value, prefix) {
+		return "", false
+	}
+	pathValue := strings.TrimPrefix(value, prefix)
+	if !strings.HasPrefix(pathValue, "/") {
+		pathValue = "/" + pathValue
+	}
+	return utils.FixAndCleanPath(pathValue), true
+}
+
+func isPathWithinRoot(candidate string, root string) bool {
+	return candidate == root || strings.HasPrefix(candidate, root+"/")
 }

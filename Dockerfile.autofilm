@@ -1,11 +1,29 @@
+# syntax=docker/dockerfile:1.4
+
+FROM node:24.18.0-alpine AS frontend-builder
+
+WORKDIR /frontend
+RUN apk add --no-cache bash curl git tar \
+    && corepack enable
+COPY --from=autofilm_frontend . .
+RUN --mount=type=cache,id=autofilm-openlist-pnpm,target=/root/.local/share/pnpm/store \
+    OPENLIST_FRONTEND_VERSION_OVERRIDE=v4.2.4 \
+    bash build.sh --dev --skip-i18n --no-compress
+
 FROM golang:1.26.4-alpine AS builder
 
 WORKDIR /app
 RUN apk add --no-cache bash curl gcc git jq musl-dev
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,id=autofilm-openlist-go-mod,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN bash build.sh release docker
+COPY --from=frontend-builder /frontend/dist ./public/dist
+RUN --mount=type=cache,id=autofilm-openlist-go-mod,target=/go/pkg/mod \
+    --mount=type=cache,id=autofilm-openlist-go-build,target=/root/.cache/go-build \
+    AUTOFILM_USE_BUNDLED_FRONTEND=true \
+    AUTOFILM_FRONTEND_VERSION=autofilm \
+    bash build.sh release docker
 
 FROM openlistteam/openlist-base-image:base
 

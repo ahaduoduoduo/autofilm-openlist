@@ -3,12 +3,12 @@
 The upstream OpenList structure is unchanged. AutoFilm-specific responsibilities
 are kept in small modules:
 
-- `internal/driver/autofilm.go`: provider-neutral authentication, credential
-  health, and scheduler contracts.
+- `internal/driver/autofilm.go`: provider-neutral authentication, passive
+  authentication state, and scheduler contracts.
 - `drivers/115/scheduler.go`: per-account HTTP rate limiting and operation
   concurrency.
-- `drivers/115/auth.go`: expiring QR sessions and explicit Cookie health checks;
-  credentials remain inside OpenList.
+- `drivers/115/auth.go`: expiring QR sessions and HTTP 405 state recording;
+  credentials remain inside OpenList, and reading state never calls 115.
 - `server/handles/autofilm.go`: authenticated object, deletion, QR, scheduler,
   in-memory offline-task snapshot, and task-scoped provider cancellation;
   standard directory and

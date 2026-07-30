@@ -30,6 +30,9 @@ else
   version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
   webVersion=$(eval "curl -fsSL --max-time 2 $githubAuthArgs \"https://api.github.com/repos/$frontendRepo/releases/latest\"" | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//g;s/ //g')
 fi
+if [ "${AUTOFILM_USE_BUNDLED_FRONTEND:-false}" = "true" ]; then
+  webVersion="${AUTOFILM_FRONTEND_VERSION:-autofilm}"
+fi
 
 echo "backend version: $version"
 echo "frontend version: $webVersion"
@@ -97,6 +100,10 @@ AssertStaticBinary() {
 }
 
 FetchWebRolling() {
+  if [ "${AUTOFILM_USE_BUNDLED_FRONTEND:-false}" = "true" ]; then
+    AssertBundledFrontend
+    return
+  fi
   pre_release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/tags/rolling\"")
   pre_release_assets=$(echo "$pre_release_json" | jq -r '.assets[].browser_download_url')
   
@@ -110,6 +117,10 @@ FetchWebRolling() {
 }
 
 FetchWebRelease() {
+  if [ "${AUTOFILM_USE_BUNDLED_FRONTEND:-false}" = "true" ]; then
+    AssertBundledFrontend
+    return
+  fi
   release_json=$(eval "curl -fsSL --max-time 2 $githubAuthArgs -H \"Accept: application/vnd.github.v3+json\" \"https://api.github.com/repos/$frontendRepo/releases/latest\"")
   release_assets=$(echo "$release_json" | jq -r '.assets[].browser_download_url')
   
@@ -123,6 +134,14 @@ FetchWebRelease() {
   rm -rf public/dist && mkdir -p public/dist
   tar -zxvf dist.tar.gz -C public/dist
   rm -rf dist.tar.gz
+}
+
+AssertBundledFrontend() {
+  if [ ! -f public/dist/index.html ]; then
+    echo "Error: bundled frontend is missing public/dist/index.html"
+    return 1
+  fi
+  echo "using bundled AutoFilm frontend"
 }
 
 BuildWinArm64() {

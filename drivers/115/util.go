@@ -25,6 +25,7 @@ import (
 	cipher "github.com/SheltonZhu/115driver/pkg/crypto/ec115"
 	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
 )
 
@@ -61,6 +62,13 @@ func (d *Pan115) newClient() *driver115.Pan115Client {
 		},
 	}
 	client := driver115.New(opts...)
+	client.Client.OnAfterResponse(func(
+		restyClient *resty.Client,
+		response *resty.Response,
+	) error {
+		d.observeProviderResponse(restyClient, response)
+		return nil
+	})
 	if d.scheduler != nil {
 		d.scheduler.installRequestLimiter(client.Client)
 	}

@@ -205,11 +205,13 @@ func autoFilm(g *gin.RouterGroup) {
 	g.POST("/auth-sessions", handles.AutoFilmStartStorageAuth)
 	g.GET("/auth-sessions/status", handles.AutoFilmGetStorageAuth)
 	g.GET("/auth-sessions/qrcode.png", handles.AutoFilmGetStorageAuthQRCode)
+	g.GET("/auth-state", handles.AutoFilmGetStorageAuthState)
 	g.GET("/auth-health", handles.AutoFilmGetStorageAuthHealth)
 	g.GET("/scheduler", handles.AutoFilmGetScheduler)
 	g.GET("/offline-tasks", handles.AutoFilmListOfflineTasks)
 	g.POST("/offline-tasks/delete", handles.AutoFilmDeleteOfflineTask)
 	g.POST("/jellyfin/scan", handles.AutoFilmScanJellyfin)
+	g.GET("/jellyfin/path-status", handles.AutoFilmGetJellyfinPathStatus)
 }
 
 func fsAndShare(g *gin.RouterGroup) {
