@@ -24,6 +24,14 @@ type MkdirOrLinkReq struct {
 }
 
 func FsMkdir(c *gin.Context) {
+	fsMkdir(c, false)
+}
+
+func AutoFilmEnsureDirectory(c *gin.Context) {
+	fsMkdir(c, true)
+}
+
+func fsMkdir(c *gin.Context, existingIsSuccess bool) {
 	var req MkdirOrLinkReq
 	if err := c.ShouldBind(&req); err != nil {
 		common.ErrorResp(c, err, 400)
@@ -50,6 +58,10 @@ func FsMkdir(c *gin.Context) {
 		return
 	}
 	if err := fs.MakeDir(c.Request.Context(), reqPath); err != nil {
+		if existingIsSuccess && errs.IsObjectAlreadyExists(err) {
+			common.SuccessResp(c)
+			return
+		}
 		common.ErrorResp(c, err, 500)
 		return
 	}

@@ -31,13 +31,7 @@ import (
 // var UserAgent = driver115.UA115Browser
 func (d *Pan115) login() error {
 	var err error
-	opts := []driver115.Option{
-		driver115.UA(d.getUA()),
-		func(c *driver115.Pan115Client) {
-			c.Client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify})
-		},
-	}
-	d.client = driver115.New(opts...)
+	d.client = d.newClient()
 	cr := &driver115.Credential{}
 	if d.QRCodeToken != "" {
 		s := &driver115.QRCodeSession{
@@ -56,13 +50,27 @@ func (d *Pan115) login() error {
 	} else {
 		return errors.New("missing cookie or qrcode account")
 	}
-	return d.client.LoginCheck()
+	return d.client.CookieCheck()
+}
+
+func (d *Pan115) newClient() *driver115.Pan115Client {
+	opts := []driver115.Option{
+		driver115.UA(d.getUA()),
+		func(c *driver115.Pan115Client) {
+			c.Client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify})
+		},
+	}
+	client := driver115.New(opts...)
+	if d.scheduler != nil {
+		d.scheduler.installRequestLimiter(client.Client)
+	}
+	return client
 }
 
 func (d *Pan115) getFiles(fileId string) ([]FileObj, error) {
 	res := make([]FileObj, 0)
 	if d.PageSize <= 0 {
-		d.PageSize = driver115.FileListLimit
+		d.PageSize = 200
 	}
 	files, err := d.client.ListWithLimit(fileId, d.PageSize, driver115.WithMultiUrls())
 	if err != nil {

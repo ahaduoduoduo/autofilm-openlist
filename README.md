@@ -115,6 +115,34 @@ Thank you for your support and understanding of the OpenList project.
 - [x] Copy files between two storage
 - [x] Multi-thread downloading acceleration for single-thread download/stream
 
+## AutoFilm integration
+
+This fork adds a credential-isolated API for Jellyfin-based remote media
+libraries. Jellyfin addresses media only by absolute OpenList path. The API
+provides path lookup, bounded directory listing, signed download paths, direct
+subtitle upload, and path deletion; provider and storage identifiers remain
+internal to OpenList.
+
+Directory listing also exposes OpenList's virtual mount hierarchy. Browsing `/`
+or an intermediate virtual directory returns configured mount points without
+calling the underlying cloud providers.
+
+OpenList does not monitor filesystem mutations for Jellyfin. Normal uploads,
+moves, renames, and deletions remain ordinary OpenList operations. An explicit
+`/api/autofilm/jellyfin/scan` operation is available when an administrator
+intentionally wants Jellyfin to import or refresh one OpenList path. AutoFilm
+Core normally calls Jellyfin directly after a media download completes.
+
+The integration API uses a dedicated service token that cannot authenticate
+against regular OpenList filesystem or administrator routes. Storage cookies
+never leave OpenList. AutoFilm Core can cancel one integration-created download
+task and remove its provider-side 115 task before trying another magnet; this
+operation cannot delete destination files. 115 requests also pass through the
+account scheduler. An explicit credential health endpoint lets Core detect an
+expired 115 login without parsing provider error text. See
+[docs/autofilm-remote-api.md](docs/autofilm-remote-api.md) for the protocol and
+safety boundaries, and [DETAILS.md](DETAILS.md) for the modified modules.
+
 ## Document
 
 - 📘 [Docs](https://doc.oplist.org)
@@ -172,4 +200,3 @@ We sincerely thank the author [Xhofe](https://github.com/Xhofe) of the original 
 Thanks goes to these wonderful people:
 
 [![Contributors](https://contrib.rocks/image?repo=OpenListTeam/OpenList)](https://github.com/OpenListTeam/OpenList/graphs/contributors)
-

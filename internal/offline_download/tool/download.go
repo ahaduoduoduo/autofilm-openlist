@@ -3,6 +3,7 @@ package tool
 import (
 	"fmt"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -30,6 +31,8 @@ type DownloadTask struct {
 	GID               string       `json:"-"`
 	tool              Tool
 	callStatusRetried int
+	removeRemoteMu    sync.Mutex
+	remoteRemoved     bool
 }
 
 func (t *DownloadTask) Run() error {
@@ -69,7 +72,7 @@ outer:
 	for {
 		select {
 		case <-t.CtxDone():
-			err := t.tool.Remove(t)
+			err := t.RemoveRemote()
 			return err
 		case <-t.Signal:
 			ok, err = t.Update()
@@ -101,7 +104,7 @@ outer:
 	if t.tool.Name() == "115 Cloud" {
 		// hack for 115
 		<-time.After(time.Second * 1)
-		err := t.tool.Remove(t)
+		err := t.RemoveRemote()
 		if err != nil {
 			log.Errorln(err.Error())
 		}
@@ -120,7 +123,7 @@ outer:
 		if seedTime >= 0 {
 			t.Status = "offline download completed, waiting for seeding"
 			<-time.After(time.Minute * time.Duration(seedTime))
-			err := t.tool.Remove(t)
+			err := t.RemoveRemote()
 			if err != nil {
 				log.Errorln(err.Error())
 			}
@@ -133,12 +136,34 @@ outer:
 		if seedTime >= 0 {
 			t.Status = "offline download completed, waiting for seeding"
 			<-time.After(time.Minute * time.Duration(seedTime))
-			err := t.tool.Remove(t)
+			err := t.RemoveRemote()
 			if err != nil {
 				log.Errorln(err.Error())
 			}
 		}
 	}
+	return nil
+}
+
+// RemoveRemote deletes the provider-side offline task once. AutoFilm uses it
+// when an instant cloud transfer does not finish within its short deadline.
+func (t *DownloadTask) RemoveRemote() error {
+	t.removeRemoteMu.Lock()
+	defer t.removeRemoteMu.Unlock()
+	if t.remoteRemoved || t.GID == "" {
+		return nil
+	}
+	if t.tool == nil {
+		downloadTool, err := Tools.Get(t.Toolname)
+		if err != nil {
+			return errors.WithMessage(err, "failed get tool")
+		}
+		t.tool = downloadTool
+	}
+	if err := t.tool.Remove(t); err != nil {
+		return err
+	}
+	t.remoteRemoved = true
 	return nil
 }
 

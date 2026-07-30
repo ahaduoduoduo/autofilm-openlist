@@ -107,6 +107,7 @@ func Init(e *gin.Engine) {
 	_task(auth.Group("/task", middlewares.AuthNotGuest))
 	_sharing(auth.Group("/share", middlewares.AuthNotGuest))
 	admin(auth.Group("/admin", middlewares.AuthAdmin))
+	autoFilm(api.Group("/autofilm", middlewares.AutoFilmServiceAuth))
 	if flags.Debug || flags.Dev {
 		debug(g.Group("/debug"))
 	}
@@ -186,6 +187,29 @@ func admin(g *gin.RouterGroup) {
 	scan.POST("/start", handles.StartManualScan)
 	scan.POST("/stop", handles.StopManualScan)
 	scan.GET("/progress", handles.GetManualScanProgress)
+
+	autoFilm(g.Group("/autofilm"))
+}
+
+func autoFilm(g *gin.RouterGroup) {
+	g.POST("/directories", handles.AutoFilmEnsureDirectory)
+	g.POST("/offline-downloads", handles.AddOfflineDownload)
+	g.POST("/objects/get", handles.AutoFilmGetObject)
+	g.POST("/objects/list", handles.AutoFilmListObjects)
+	g.POST("/objects/delete", handles.AutoFilmDeleteObject)
+	g.PUT(
+		"/objects/put",
+		middlewares.FsUp,
+		middlewares.UploadRateLimiter(stream.ClientUploadLimit),
+		handles.FsStream)
+	g.POST("/auth-sessions", handles.AutoFilmStartStorageAuth)
+	g.GET("/auth-sessions/status", handles.AutoFilmGetStorageAuth)
+	g.GET("/auth-sessions/qrcode.png", handles.AutoFilmGetStorageAuthQRCode)
+	g.GET("/auth-health", handles.AutoFilmGetStorageAuthHealth)
+	g.GET("/scheduler", handles.AutoFilmGetScheduler)
+	g.GET("/offline-tasks", handles.AutoFilmListOfflineTasks)
+	g.POST("/offline-tasks/delete", handles.AutoFilmDeleteOfflineTask)
+	g.POST("/jellyfin/scan", handles.AutoFilmScanJellyfin)
 }
 
 func fsAndShare(g *gin.RouterGroup) {

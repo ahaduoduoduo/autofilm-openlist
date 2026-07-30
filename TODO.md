@@ -1,0 +1,31 @@
+# AutoFilm development status
+
+Updated: 2026-07-29
+
+## Completed
+
+- [x] 2026-07-28: Reduce the Jellyfin-facing object contract to absolute paths;
+  storage IDs and provider object IDs remain internal.
+- [x] 2026-07-28: Add path lookup, bounded directory listing, direct upload,
+  signed download, and path deletion APIs.
+- [x] 2026-07-28: Expose virtual mount directories through the AutoFilm listing
+  API without querying cloud providers.
+- [x] 2026-07-29: Remove global object observations and durable filesystem
+  events. OpenList file mutations no longer imply Jellyfin library changes.
+- [x] 2026-07-29: Add an explicit path-based Jellyfin scan operation for
+  administrator-requested imports and refreshes.
+- [x] 2026-07-27: Add channel-neutral 115 QR login sessions.
+- [x] 2026-07-27: Add 115 account-level rate and concurrency scheduling.
+- [x] 2026-07-27: Add a dedicated, least-privilege AutoFilm service token and
+  direct subtitle upload route.
+- [x] 2026-07-28: Expose a least-privilege, read-only in-memory offline-task
+  snapshot for AutoFilm Core progress tracking.
+- [x] 2026-07-29: Add a task-scoped cancellation endpoint that removes the
+  provider-side 115 offline task without deleting destination objects.
+- [x] 2026-07-30: Add a machine-readable 115 credential health check for
+  channel-neutral administrator notifications.
+
+## Planned
+
+- [ ] Add metrics for provider latency, throttling, and authentication failures.
+- [ ] Verify QR login and upload behavior against a dedicated 115 test account.
