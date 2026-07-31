@@ -1,9 +1,13 @@
 # AutoFilm development status
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 
 ## Completed
 
+- [x] 2026-07-31: Add an exact synchronous same-storage object move to the
+  least-privilege AutoFilm API. It rejects roots, cross-storage moves and
+  destination collisions, supports a final file name, and returns the final
+  provider-neutral path for media replacement and old-file backup.
 - [x] 2026-07-30: Make refreshed object lookup reload the exact parent
   directory so completed offline-download results do not require a manual
   OpenList browser refresh before Jellyfin import.

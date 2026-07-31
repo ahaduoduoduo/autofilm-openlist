@@ -196,6 +196,7 @@ func autoFilm(g *gin.RouterGroup) {
 	g.POST("/offline-downloads", handles.AddOfflineDownload)
 	g.POST("/objects/get", handles.AutoFilmGetObject)
 	g.POST("/objects/list", handles.AutoFilmListObjects)
+	g.POST("/objects/move", handles.AutoFilmMoveObject)
 	g.POST("/objects/delete", handles.AutoFilmDeleteObject)
 	g.PUT(
 		"/objects/put",

@@ -1,6 +1,6 @@
 # AutoFilm remote API
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 
 ## Purpose and trust boundary
 
@@ -103,6 +103,35 @@ Storage-root deletion is rejected. A successful request deletes the path
 through the selected OpenList driver. Jellyfin calls this operation before
 removing its own item, so a remote deletion failure preserves the Jellyfin
 record.
+
+### Move one exact path
+
+`POST /objects/move`
+
+```json
+{
+  "source_path": "/115/autofilm-staging/upgrades/item/new.mkv",
+  "destination_directory": "/115/movie/example",
+  "destination_name": "new.upgrade-12345678.mkv"
+}
+```
+
+The operation is synchronous and restricted to one configured storage. It
+rejects storage roots, cross-storage transfers, unsafe destination names and
+existing destinations. When `destination_name` differs, OpenList renames the
+source before moving and restores the original name if the move fails.
+
+The response is the same provider-neutral object contract as `/objects/get`
+and contains the final path. AutoFilm Core uses this endpoint for two
+resource-upgrade operations:
+
+1. Move one downloaded and identified replacement file from its isolated
+   staging directory into the existing media directory.
+2. After Jellyfin has updated and verified the original Item ID, move the old
+   video into `/115/autofilm-backups/upgrades/<upgrade-item-id>`.
+
+This endpoint does not notify Jellyfin, create an OpenList event, or permit
+cross-storage copy fallback.
 
 ## Explicit Jellyfin scan
 

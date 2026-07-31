@@ -120,8 +120,10 @@ Thank you for your support and understanding of the OpenList project.
 This fork adds a credential-isolated API for Jellyfin-based remote media
 libraries. Jellyfin addresses media only by absolute OpenList path. The API
 provides path lookup, bounded directory listing, signed download paths, direct
-subtitle upload, and path deletion; provider and storage identifiers remain
-internal to OpenList.
+subtitle upload, exact same-storage move, and path deletion; provider and
+storage identifiers remain internal to OpenList. The move operation is used by
+AutoFilm Core only after a resource-upgrade download succeeds and returns the
+observable final path before Jellyfin changes its existing media record.
 
 Directory listing also exposes OpenList's virtual mount hierarchy. Browsing `/`
 or an intermediate virtual directory returns configured mount points without

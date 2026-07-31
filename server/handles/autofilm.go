@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/db"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	"github.com/OpenListTeam/OpenList/v4/internal/fs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/offline_download/tool"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
@@ -26,6 +28,12 @@ type AutoFilmObjectReq struct {
 
 type AutoFilmDeleteObjectReq struct {
 	Path string `json:"path" binding:"required"`
+}
+
+type AutoFilmMoveObjectReq struct {
+	SourcePath           string `json:"source_path" binding:"required"`
+	DestinationDirectory string `json:"destination_directory" binding:"required"`
+	DestinationName      string `json:"destination_name"`
 }
 
 type AutoFilmObjectResp struct {
@@ -241,6 +249,74 @@ func AutoFilmDeleteObject(c *gin.Context) {
 		return
 	}
 	common.SuccessResp(c)
+}
+
+// AutoFilmMoveObject performs one exact, synchronous move within the same
+// storage. Upgrade orchestration depends on the final path being observable
+// before Jellyfin changes an existing media record.
+func AutoFilmMoveObject(c *gin.Context) {
+	var req AutoFilmMoveObjectReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ErrorResp(c, err, 400)
+		return
+	}
+	sourcePath := utils.FixAndCleanPath(req.SourcePath)
+	destinationDirectory := utils.FixAndCleanPath(req.DestinationDirectory)
+	if sourcePath == "/" || (destinationDirectory == "/" && stdpath.Dir(sourcePath) == "/") {
+		common.ErrorStrResp(c, "storage root move is not allowed", 400)
+		return
+	}
+	sourceStorage, _, err := op.GetStorageAndActualPath(sourcePath)
+	if err != nil {
+		common.ErrorResp(c, err, 404)
+		return
+	}
+	destinationStorage, _, err := op.GetStorageAndActualPath(destinationDirectory)
+	if err != nil {
+		common.ErrorResp(c, err, 404)
+		return
+	}
+	if sourceStorage.GetStorage().ID != destinationStorage.GetStorage().ID {
+		common.ErrorStrResp(c, "cross-storage AutoFilm moves are not allowed", 400)
+		return
+	}
+	sourceName := stdpath.Base(sourcePath)
+	destinationName := req.DestinationName
+	if destinationName == "" {
+		destinationName = sourceName
+	}
+	if destinationName != stdpath.Base(destinationName) || destinationName == "." || destinationName == "/" {
+		common.ErrorStrResp(c, "destination_name must be one file name", 400)
+		return
+	}
+	finalPath := stdpath.Join(destinationDirectory, destinationName)
+	if existing, _ := fs.Get(c.Request.Context(), finalPath, &fs.GetArgs{NoLog: true}); existing != nil {
+		common.ErrorStrResp(c, "destination already exists", 409)
+		return
+	}
+
+	moveContext := context.WithValue(c.Request.Context(), conf.NoTaskKey, struct{}{})
+	moveSourcePath := sourcePath
+	if destinationName != sourceName {
+		if err := fs.Rename(moveContext, sourcePath, destinationName, true); err != nil {
+			common.ErrorResp(c, err, 500)
+			return
+		}
+		moveSourcePath = stdpath.Join(stdpath.Dir(sourcePath), destinationName)
+	}
+	if _, err := fs.Move(moveContext, moveSourcePath, destinationDirectory, true); err != nil {
+		if moveSourcePath != sourcePath {
+			_ = fs.Rename(moveContext, moveSourcePath, sourceName, true)
+		}
+		common.ErrorResp(c, err, 500)
+		return
+	}
+	obj, err := fs.Get(c.Request.Context(), finalPath, &fs.GetArgs{NoLog: true})
+	if err != nil {
+		common.ErrorResp(c, err, 500)
+		return
+	}
+	common.SuccessResp(c, autoFilmObjectResponse(obj, finalPath))
 }
 
 func autoFilmStorageProvider(
