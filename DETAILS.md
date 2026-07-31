@@ -18,8 +18,10 @@ are kept in small modules:
   Refreshed object lookup reloads only the object's parent directory and
   resolves the target from that provider result.
   Exact moves execute synchronously through the selected driver, optionally
-  rename before the move, reject destination collisions, and return the final
-  object so Core can persist the actual path.
+  rename in the destination after the move, reject destination collisions, and
+  return the final object so Core can persist the actual path. Moving before
+  renaming avoids transient post-rename lookup failures on remote drivers; a
+  bounded 7-second visibility wait precedes the destination rename.
 - `server/handles/autofilm_jellyfin.go`: explicit administrator-requested path
   import or refresh in Jellyfin. OpenList filesystem mutations never call it.
 - `server/handles/autofilm_test.go`: virtual directory response coverage.

@@ -4,6 +4,9 @@ Updated: 2026-07-31
 
 ## Completed
 
+- [x] 2026-07-31: Move AutoFilm objects under their original name before an
+  optional destination rename, eliminating the remote post-rename lookup that
+  could leave an upgrade file renamed inside its staging directory.
 - [x] 2026-07-31: Add an exact synchronous same-storage object move to the
   least-privilege AutoFilm API. It rejects roots, cross-storage moves and
   destination collisions, supports a final file name, and returns the final

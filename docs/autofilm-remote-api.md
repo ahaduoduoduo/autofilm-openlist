@@ -119,7 +119,13 @@ record.
 The operation is synchronous and restricted to one configured storage. It
 rejects storage roots, cross-storage transfers, unsafe destination names and
 existing destinations. When `destination_name` differs, OpenList renames the
-source before moving and restores the original name if the move fails.
+object only after it has moved under its original name into the destination
+directory. This ordering avoids a second source lookup while a remote provider
+still exposes stale post-rename contents. Before renaming, the handler waits up
+to 7 seconds for a non-temporary provider object using bounded 1, 2 and 4 second
+delays. If the destination rename fails,
+OpenList attempts to move the original name back to its source directory and
+returns the remaining path when that recovery also fails.
 
 The response is the same provider-neutral object contract as `/objects/get`
 and contains the final path. AutoFilm Core uses this endpoint for two

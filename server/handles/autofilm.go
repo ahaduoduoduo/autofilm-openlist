@@ -271,7 +271,7 @@ func AutoFilmMoveObject(c *gin.Context) {
 		common.ErrorResp(c, err, 404)
 		return
 	}
-	destinationStorage, _, err := op.GetStorageAndActualPath(destinationDirectory)
+	destinationStorage, destinationActualDirectory, err := op.GetStorageAndActualPath(destinationDirectory)
 	if err != nil {
 		common.ErrorResp(c, err, 404)
 		return
@@ -290,26 +290,70 @@ func AutoFilmMoveObject(c *gin.Context) {
 		return
 	}
 	finalPath := stdpath.Join(destinationDirectory, destinationName)
+	if finalPath == sourcePath {
+		obj, getErr := fs.Get(c.Request.Context(), sourcePath, &fs.GetArgs{NoLog: true})
+		if getErr != nil {
+			common.ErrorResp(c, getErr, 404)
+			return
+		}
+		common.SuccessResp(c, autoFilmObjectResponse(obj, sourcePath))
+		return
+	}
 	if existing, _ := fs.Get(c.Request.Context(), finalPath, &fs.GetArgs{NoLog: true}); existing != nil {
 		common.ErrorStrResp(c, "destination already exists", 409)
 		return
 	}
 
 	moveContext := context.WithValue(c.Request.Context(), conf.NoTaskKey, struct{}{})
-	moveSourcePath := sourcePath
-	if destinationName != sourceName {
-		if err := fs.Rename(moveContext, sourcePath, destinationName, true); err != nil {
+	sourceDirectory := stdpath.Dir(sourcePath)
+	if sourceDirectory == destinationDirectory {
+		if destinationName != sourceName {
+			if err := fs.Rename(moveContext, sourcePath, destinationName, true); err != nil {
+				common.ErrorResp(c, err, 500)
+				return
+			}
+		}
+	} else {
+		// Some remote drivers do not expose a renamed object immediately. Moving
+		// the original object first avoids a second source lookup against that
+		// temporarily stale remote directory.
+		if _, err := fs.Move(moveContext, sourcePath, destinationDirectory, true); err != nil {
 			common.ErrorResp(c, err, 500)
 			return
 		}
-		moveSourcePath = stdpath.Join(stdpath.Dir(sourcePath), destinationName)
-	}
-	if _, err := fs.Move(moveContext, moveSourcePath, destinationDirectory, true); err != nil {
-		if moveSourcePath != sourcePath {
-			_ = fs.Rename(moveContext, moveSourcePath, sourceName, true)
+		movedPath := stdpath.Join(destinationDirectory, sourceName)
+		if destinationName != sourceName {
+			movedActualPath := stdpath.Join(destinationActualDirectory, sourceName)
+			if _, err := autoFilmWaitForStableObject(
+				moveContext,
+				destinationStorage,
+				movedActualPath); err != nil {
+				_, rollbackErr := fs.Move(moveContext, movedPath, sourceDirectory, true)
+				if rollbackErr != nil {
+					common.ErrorResp(c, fmt.Errorf(
+						"wait for moved object: %w; rollback move failed: %v; object remains at %s",
+						err,
+						rollbackErr,
+						movedPath), 500)
+					return
+				}
+				common.ErrorResp(c, fmt.Errorf("wait for moved object: %w", err), 500)
+				return
+			}
+			if err := fs.Rename(moveContext, movedPath, destinationName, true); err != nil {
+				_, rollbackErr := fs.Move(moveContext, movedPath, sourceDirectory, true)
+				if rollbackErr != nil {
+					common.ErrorResp(c, fmt.Errorf(
+						"rename moved object: %w; rollback move failed: %v; object remains at %s",
+						err,
+						rollbackErr,
+						movedPath), 500)
+					return
+				}
+				common.ErrorResp(c, fmt.Errorf("rename moved object: %w", err), 500)
+				return
+			}
 		}
-		common.ErrorResp(c, err, 500)
-		return
 	}
 	obj, err := fs.Get(c.Request.Context(), finalPath, &fs.GetArgs{NoLog: true})
 	if err != nil {
@@ -317,6 +361,33 @@ func AutoFilmMoveObject(c *gin.Context) {
 		return
 	}
 	common.SuccessResp(c, autoFilmObjectResponse(obj, finalPath))
+}
+
+func autoFilmWaitForStableObject(
+	ctx context.Context,
+	storage driver.Driver,
+	actualPath string,
+) (model.Obj, error) {
+	delays := [...]time.Duration{0, time.Second, 2 * time.Second, 4 * time.Second}
+	var lastErr error
+	for _, delay := range delays {
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		obj, err := op.Get(ctx, storage, actualPath, true)
+		if err == nil {
+			return obj, nil
+		}
+		if !errs.IsObjectNotFound(err) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("moved object did not become visible within 7 seconds: %w", lastErr)
 }
 
 func autoFilmStorageProvider(

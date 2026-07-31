@@ -124,6 +124,9 @@ subtitle upload, exact same-storage move, and path deletion; provider and
 storage identifiers remain internal to OpenList. The move operation is used by
 AutoFilm Core only after a resource-upgrade download succeeds and returns the
 observable final path before Jellyfin changes its existing media record.
+For a move with a new name, the source is moved first and renamed in the target
+directory so remote providers do not need to expose a just-renamed source
+immediately.
 
 Directory listing also exposes OpenList's virtual mount hierarchy. Browsing `/`
 or an intermediate virtual directory returns configured mount points without
