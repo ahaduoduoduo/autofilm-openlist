@@ -193,16 +193,22 @@ require a forced login.
 
 `GET /offline-tasks` returns the current in-memory download and transfer task
 snapshot. It does not list storage objects or call 115. AutoFilm Core uses this
-endpoint for progress updates. For a completed 115 download, `result_path`
-contains the destination directory joined with the final name reported by 115.
-It is omitted until the provider has returned that name. No provider object ID
-is exposed.
+endpoint for progress updates. A newly created OpenList task omits
+`provider_task_id` and `provider_submitted_at` while it is waiting in the local
+queue. Both fields appear only after the offline driver has successfully
+submitted the URL and received the provider task ID. AutoFilm Core starts the
+short 115 completion deadline from `provider_submitted_at`, not from OpenList
+task creation. For a completed 115 download, `result_path` contains the
+destination directory joined with the final name reported by 115. It is omitted
+until the provider has returned that name. `provider_task_id` identifies a
+temporary offline task and is not a provider media object ID.
 
 `POST /offline-tasks/delete` accepts `{"task_id":"..."}` for a download task
 created through `/offline-downloads`. It cancels the OpenList task and removes
-the corresponding provider-side offline task without deleting any destination
-object. AutoFilm Core uses it before trying the next release candidate when a
-115 instant offline transfer exceeds its configured short deadline.
+the corresponding provider-side offline task, when one has been accepted,
+without deleting any destination object. AutoFilm Core uses it before trying
+the next release candidate when a 115 instant offline transfer exceeds its
+configured short deadline.
 
 The 115 cookie stays inside its driver. Every 115 request passes through the
 per-account limiter. Defaults are one request per second, burst one, and one

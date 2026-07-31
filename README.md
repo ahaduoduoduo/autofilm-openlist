@@ -149,6 +149,13 @@ successful provider request clears it. See
 [docs/autofilm-remote-api.md](docs/autofilm-remote-api.md) for the protocol and
 safety boundaries, and [DETAILS.md](DETAILS.md) for the modified modules.
 
+Offline-task snapshots distinguish the OpenList task from provider acceptance.
+`provider_task_id` and `provider_submitted_at` appear only after the offline
+driver has successfully submitted the URL. AutoFilm Core starts its short 115
+completion deadline from that timestamp, so time spent in OpenList's internal
+queue cannot be mistaken for a 115 timeout. The provider task ID is operational
+task metadata, not a persistent media object mapping.
+
 ## Document
 
 - 📘 [Docs](https://doc.oplist.org)

@@ -4,6 +4,9 @@ Updated: 2026-07-31
 
 ## Completed
 
+- [x] 2026-07-31: Expose provider task ID and provider acceptance time only
+  after the offline driver accepts a URL, keeping OpenList queue time outside
+  AutoFilm Core's short 115 completion deadline.
 - [x] 2026-07-31: Move AutoFilm objects under their original name before an
   optional destination rename, eliminating the remote post-rename lookup that
   could leave an upgrade file renamed inside its staging directory.

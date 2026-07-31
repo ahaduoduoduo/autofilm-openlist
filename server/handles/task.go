@@ -18,18 +18,20 @@ import (
 )
 
 type TaskInfo struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Creator     string      `json:"creator"`
-	CreatorRole int         `json:"creator_role"`
-	State       tache.State `json:"state"`
-	Status      string      `json:"status"`
-	Progress    float64     `json:"progress"`
-	StartTime   *time.Time  `json:"start_time"`
-	EndTime     *time.Time  `json:"end_time"`
-	TotalBytes  int64       `json:"total_bytes"`
-	Error       string      `json:"error"`
-	ResultPath  string      `json:"result_path,omitempty"`
+	ID                  string      `json:"id"`
+	Name                string      `json:"name"`
+	Creator             string      `json:"creator"`
+	CreatorRole         int         `json:"creator_role"`
+	State               tache.State `json:"state"`
+	Status              string      `json:"status"`
+	Progress            float64     `json:"progress"`
+	StartTime           *time.Time  `json:"start_time"`
+	EndTime             *time.Time  `json:"end_time"`
+	TotalBytes          int64       `json:"total_bytes"`
+	Error               string      `json:"error"`
+	ResultPath          string      `json:"result_path,omitempty"`
+	ProviderTaskID      string      `json:"provider_task_id,omitempty"`
+	ProviderSubmittedAt *time.Time  `json:"provider_submitted_at,omitempty"`
 }
 
 func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
@@ -61,12 +63,15 @@ func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
 		TotalBytes:  task.GetTotalBytes(),
 		Error:       errMsg,
 	}
-	if downloadTask, ok := any(task).(*tool.DownloadTask); ok &&
-		downloadTask.ResultName != "" {
-		info.ResultPath = path.Join(
-			downloadTask.TempDir,
-			downloadTask.ResultName,
-		)
+	if downloadTask, ok := any(task).(*tool.DownloadTask); ok {
+		if downloadTask.ResultName != "" {
+			info.ResultPath = path.Join(
+				downloadTask.TempDir,
+				downloadTask.ResultName,
+			)
+		}
+		info.ProviderTaskID, info.ProviderSubmittedAt =
+			downloadTask.ProviderSubmission()
 	}
 	return info
 }

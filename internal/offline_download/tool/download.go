@@ -30,10 +30,12 @@ type DownloadTask struct {
 	ResultName        string       `json:"result_name,omitempty"`
 	Signal            chan int     `json:"-"`
 	GID               string       `json:"-"`
-	tool              Tool
-	callStatusRetried int
-	removeRemoteMu    sync.Mutex
-	remoteRemoved     bool
+	ProviderTaskID      string     `json:"provider_task_id,omitempty"`
+	ProviderSubmittedAt *time.Time `json:"provider_submitted_at,omitempty"`
+	tool                Tool
+	callStatusRetried   int
+	removeRemoteMu      sync.Mutex
+	remoteRemoved       bool
 }
 
 func (t *DownloadTask) Run() error {
@@ -67,7 +69,7 @@ func (t *DownloadTask) Run() error {
 	if err != nil {
 		return err
 	}
-	t.GID = gid
+	t.setProviderTaskID(gid)
 	var ok bool
 outer:
 	for {
@@ -168,6 +170,22 @@ func (t *DownloadTask) RemoveRemote() error {
 	return nil
 }
 
+// ProviderSubmission returns the provider-side task identifier and the time
+// at which the provider accepted it. An OpenList task can exist before this
+// point while its worker is still waiting to submit the URL.
+func (t *DownloadTask) ProviderSubmission() (string, *time.Time) {
+	return t.ProviderTaskID, t.ProviderSubmittedAt
+}
+
+func (t *DownloadTask) setProviderTaskID(gid string) {
+	t.GID = gid
+	t.ProviderTaskID = gid
+	if gid != "" && t.ProviderSubmittedAt == nil {
+		submittedAt := time.Now().UTC()
+		t.ProviderSubmittedAt = &submittedAt
+	}
+}
+
 // Update download status, return true if download completed
 func (t *DownloadTask) Update() (bool, error) {
 	info, err := t.tool.Status(t)
@@ -188,7 +206,7 @@ func (t *DownloadTask) Update() (bool, error) {
 	t.Status = fmt.Sprintf("[%s]: %s", t.tool.Name(), info.Status)
 	if info.NewGID != "" {
 		log.Debugf("followen by: %+v", info.NewGID)
-		t.GID = info.NewGID
+		t.setProviderTaskID(info.NewGID)
 		return false, nil
 	}
 	// if download completed

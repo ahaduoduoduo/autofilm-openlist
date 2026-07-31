@@ -32,10 +32,12 @@ are kept in small modules:
   administrator-compatible `/api/admin/autofilm` alias.
 - `internal/offline_download/tool/download.go`: idempotent provider-side task
   removal shared by normal cancellation and AutoFilm short-deadline retries;
-  it also retains the provider's final result name in task memory.
-- `server/handles/task.go`: adds `result_path` to completed offline-task
-  snapshots by joining the destination directory and final provider result
-  name. This path-only contract does not expose or persist provider object IDs.
+  it also retains the provider's task ID, acceptance time, and final result name
+  in task memory.
+- `server/handles/task.go`: adds `provider_task_id` and
+  `provider_submitted_at` after provider acceptance, plus `result_path` after
+  completion. The provider task ID controls retry timing only and is not a
+  persistent media object ID.
 - `Dockerfile.autofilm`: builds the modified OpenList binary for the isolated
   integration image.
 
