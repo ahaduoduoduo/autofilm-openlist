@@ -1,6 +1,6 @@
 # AutoFilm remote API
 
-Updated: 2026-07-31
+Updated: 2026-08-06
 
 ## Purpose and trust boundary
 
@@ -154,7 +154,8 @@ path:
   "path": "/115/movie/title.mkv",
   "refresh": false,
   "recursive": false,
-  "force_probe": true
+  "force_probe": true,
+  "scan_mode": "new"
 }
 ```
 
@@ -162,6 +163,12 @@ Configure this operation with:
 
 - `AUTOFILM_JELLYFIN_URL`, for example `http://jellyfin:8096`
 - `AUTOFILM_JELLYFIN_API_KEY`, a Jellyfin administrator API key
+
+`scan_mode` accepts `new` or `full` and defaults to `new`. The additive mode
+creates missing Jellyfin records. Full mode makes Jellyfin force a fresh,
+bounded snapshot, remove stale database-only descendants, and correct item
+types; it does not delete OpenList objects. The selected path may be a directory
+or a video file.
 
 The handler forwards the request to Jellyfin `POST /AutoFilm/RemoteRefresh`.
 It does not list the OpenList directory itself. Jellyfin performs the bounded

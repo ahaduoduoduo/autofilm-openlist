@@ -30,6 +30,7 @@ type AutoFilmJellyfinScanReq struct {
 	Refresh    bool   `json:"refresh"`
 	Recursive  bool   `json:"recursive"`
 	ForceProbe bool   `json:"force_probe"`
+	ScanMode   string `json:"scan_mode"`
 }
 
 type autoFilmJellyfinRefreshReq struct {
@@ -37,6 +38,7 @@ type autoFilmJellyfinRefreshReq struct {
 	Refresh    bool   `json:"refresh"`
 	Recursive  bool   `json:"recursive"`
 	ForceProbe bool   `json:"force_probe"`
+	ScanMode   string `json:"scan_mode"`
 }
 
 type autoFilmJellyfinVirtualFolder struct {
@@ -62,6 +64,11 @@ func AutoFilmScanJellyfin(c *gin.Context) {
 	}
 
 	cleanPath, err := normalizeAutoFilmJellyfinPath(req.Path)
+	if err != nil {
+		common.ErrorResp(c, err, http.StatusBadRequest)
+		return
+	}
+	req.ScanMode, err = normalizeAutoFilmJellyfinScanMode(req.ScanMode)
 	if err != nil {
 		common.ErrorResp(c, err, http.StatusBadRequest)
 		return
@@ -125,6 +132,17 @@ func normalizeAutoFilmJellyfinPath(value string) (string, error) {
 	return stdpath.Clean(cleanPath), nil
 }
 
+func normalizeAutoFilmJellyfinScanMode(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" || value == "new" {
+		return "new", nil
+	}
+	if value == "full" {
+		return "full", nil
+	}
+	return "", fmt.Errorf("scan_mode must be new or full")
+}
+
 func requestAutoFilmJellyfinRefresh(
 	c *gin.Context,
 	cleanPath string,
@@ -140,6 +158,7 @@ func requestAutoFilmJellyfinRefresh(
 		Refresh:    req.Refresh,
 		Recursive:  req.Recursive,
 		ForceProbe: req.ForceProbe,
+		ScanMode:   req.ScanMode,
 	})
 	if err != nil {
 		return nil, err

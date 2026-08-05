@@ -81,6 +81,32 @@ func TestNormalizeAutoFilmJellyfinPath(t *testing.T) {
 	}
 }
 
+func TestNormalizeAutoFilmJellyfinScanMode(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{value: "", want: "new"},
+		{value: " NEW ", want: "new"},
+		{value: "full", want: "full"},
+		{value: "replace", wantErr: true},
+	} {
+		got, err := normalizeAutoFilmJellyfinScanMode(test.value)
+		if test.wantErr {
+			if err == nil {
+				t.Fatalf("expected %q to fail, got %q", test.value, got)
+			}
+			continue
+		}
+		if err != nil || got != test.want {
+			t.Fatalf("mode %q: got (%q, %v), want %q", test.value, got, err, test.want)
+		}
+	}
+}
+
 func TestRequestAutoFilmJellyfinRefresh(t *testing.T) {
 	var receivedAuthorization string
 	var receivedBody string
@@ -108,6 +134,7 @@ func TestRequestAutoFilmJellyfinRefresh(t *testing.T) {
 			Refresh:    true,
 			Recursive:  false,
 			ForceProbe: true,
+			ScanMode:   "full",
 		},
 	)
 	if err != nil {
@@ -121,6 +148,7 @@ func TestRequestAutoFilmJellyfinRefresh(t *testing.T) {
 		`"refresh":true`,
 		`"recursive":false`,
 		`"force_probe":true`,
+		`"scan_mode":"full"`,
 	} {
 		if !strings.Contains(receivedBody, expected) {
 			t.Fatalf("request body %q does not contain %q", receivedBody, expected)

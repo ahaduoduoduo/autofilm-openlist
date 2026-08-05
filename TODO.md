@@ -1,8 +1,11 @@
 # AutoFilm development status
 
-Updated: 2026-07-31
+Updated: 2026-08-06
 
 ## Completed
+
+- [x] 2026-08-06: Extend the explicit Jellyfin scan request with validated
+  `new` and `full` modes for both OpenList video files and directories.
 
 - [x] 2026-07-31: Expose provider task ID and provider acceptance time only
   after the offline driver accepts a URL, keeping OpenList queue time outside

@@ -1,5 +1,7 @@
 # AutoFilm module map
 
+Updated: 2026-08-06
+
 The upstream OpenList structure is unchanged. AutoFilm-specific responsibilities
 are kept in small modules:
 
@@ -22,8 +24,9 @@ are kept in small modules:
   return the final object so Core can persist the actual path. Moving before
   renaming avoids transient post-rename lookup failures on remote drivers; a
   bounded 7-second visibility wait precedes the destination rename.
-- `server/handles/autofilm_jellyfin.go`: explicit administrator-requested path
-  import or refresh in Jellyfin. OpenList filesystem mutations never call it.
+- `server/handles/autofilm_jellyfin.go`: explicit administrator-requested file
+  or directory import in Jellyfin. It validates and forwards additive or full
+  scan mode; OpenList filesystem mutations never call it.
 - `server/handles/autofilm_test.go`: virtual directory response coverage.
 - `server/middlewares/autofilm.go`: constant-time validation for the dedicated
   AutoFilm service token; its temporary user context exists only inside the

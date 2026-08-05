@@ -135,7 +135,9 @@ calling the underlying cloud providers.
 OpenList does not monitor filesystem mutations for Jellyfin. Normal uploads,
 moves, renames, and deletions remain ordinary OpenList operations. An explicit
 `/api/autofilm/jellyfin/scan` operation is available when an administrator
-intentionally wants Jellyfin to import or refresh one OpenList path. AutoFilm
+intentionally wants Jellyfin to import or refresh one OpenList file or
+directory. The request selects additive or full database reconciliation mode;
+both modes leave OpenList files unchanged. AutoFilm
 Core normally calls Jellyfin directly after a media download completes.
 
 The integration API uses a dedicated service token that cannot authenticate
