@@ -202,5 +202,5 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/ahaduoduoduo/autofilm-openlist:restic-backup-gateway
-            ghcr.io/ahaduoduoduo/autofilm-openlist:sha-${{ github.sha }}
+            ghcr.io/ahaduoduoduo/autofilm-openlist-restic:gateway
+            ghcr.io/ahaduoduoduo/autofilm-openlist-restic:sha-${{ github.sha }}
