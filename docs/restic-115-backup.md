@@ -1,5 +1,11 @@
 # Restic to 115 through OpenList
 
+The production Synology image is published by manually running
+`.github/workflows/test_docker.yml`. The manual job builds only the
+`linux/amd64` base image and publishes both `restic-backup-gateway` and an
+immutable commit SHA tag. Regular main-branch and pull-request builds keep the
+upstream multi-platform test matrix.
+
 Updated: 2026-08-06
 
 ## Architecture

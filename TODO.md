@@ -4,6 +4,8 @@ Updated: 2026-08-06
 
 ## Completed
 
+- [x] 2026-08-06: Add a manual Synology deployment build that publishes one
+  linux/amd64 image with mutable gateway and immutable commit tags.
 - [x] 2026-08-06: Add a native Restic REST v1/v2 endpoint backed by mapped
   OpenList directories, including Range reads, data-pack sharding, HTTP basic
   authentication, and an administrator traffic-usage API.
