@@ -700,6 +700,8 @@ elif [ "$buildType" = "release" -o "$buildType" = "beta" ]; then
   fi
   if [ "$dockerType" = "docker" ]; then
     BuildDocker
+  elif [ "$dockerType" = "docker-amd64" ]; then
+    BuildDockerAmd64
   elif [ "$dockerType" = "docker-multiplatform" ]; then
     BuildDockerMultiplatform
   elif [ "$dockerType" = "linux_musl_arm" ]; then
