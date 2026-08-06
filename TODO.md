@@ -1,9 +1,15 @@
-# AutoFilm development status
+# Custom OpenList development status
 
 Updated: 2026-08-06
 
 ## Completed
 
+- [x] 2026-08-06: Add a native Restic REST v1/v2 endpoint backed by mapped
+  OpenList directories, including Range reads, data-pack sharding, HTTP basic
+  authentication, and an administrator traffic-usage API.
+- [x] 2026-08-06: Apply Restic-specific rate, daily, and monthly limits at the
+  actual 115 OSS reader. Rapid-upload matches consume no WAN quota, while
+  multipart retries consume their actual transmitted bytes.
 - [x] 2026-08-06: Extend the explicit Jellyfin scan request with validated
   `new` and `full` modes for both OpenList video files and directories.
 
@@ -47,5 +53,8 @@ Updated: 2026-08-06
 
 ## Planned
 
+- [ ] Validate Restic init, backup, snapshots, restore, check, and prune against
+  a dedicated 115 test directory through the GitHub-built image.
+- [ ] Display `/api/admin/restic/usage` in the customized Backrest console.
 - [ ] Add metrics for provider latency, throttling, and authentication failures.
 - [ ] Verify QR login and upload behavior against a dedicated 115 test account.

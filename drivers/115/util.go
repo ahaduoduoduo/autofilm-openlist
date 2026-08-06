@@ -20,6 +20,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	netutil "github.com/OpenListTeam/OpenList/v4/internal/net"
+	"github.com/OpenListTeam/OpenList/v4/internal/resticquota"
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	cipher "github.com/SheltonZhu/115driver/pkg/crypto/ec115"
@@ -249,10 +250,10 @@ func (c *Pan115) UploadByOSS(ctx context.Context, params *driver115.UploadOSSPar
 	}
 
 	var bodyBytes []byte
-	r := driver.NewLimitedUploadStream(ctx, &driver.ReaderUpdatingProgress{
+	r := resticquota.WrapReader(ctx, driver.NewLimitedUploadStream(ctx, &driver.ReaderUpdatingProgress{
 		Reader:         s,
 		UpdateProgress: up,
-	})
+	}))
 	if err = bucket.PutObject(params.Object, r, append(
 		driver115.OssOption(params, ossToken),
 		oss.CallbackResult(&bodyBytes),
@@ -366,7 +367,7 @@ func (d *Pan115) UploadByMultipart(ctx context.Context, params *driver115.Upload
 					if _, err = tmpF.ReadAt(buf, chunk.Offset); err != nil && !errors.Is(err, io.EOF) {
 						continue
 					}
-					if part, err = bucket.UploadPart(imur, driver.NewLimitedUploadStream(ctx, bytes.NewReader(buf)),
+					if part, err = bucket.UploadPart(imur, resticquota.WrapReader(ctx, driver.NewLimitedUploadStream(ctx, bytes.NewReader(buf))),
 						chunk.Size, chunk.Number, driver115.OssOption(params, ossToken)...); err == nil {
 						break
 					}
