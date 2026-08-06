@@ -115,6 +115,21 @@ Thank you for your support and understanding of the OpenList project.
 - [x] Copy files between two storage
 - [x] Multi-thread downloading acceleration for single-thread download/stream
 
+## Restic backup gateway
+
+This fork exposes mapped OpenList directories as native Restic REST
+repositories. Restic talks directly to `/restic/{repository}/`; no WebDAV,
+rclone, or S3 compatibility layer is involved. Repository objects retain the
+standard Restic layout and can be opened by any Restic client.
+
+115 upload rate and calendar quotas are enforced where the 115 OSS client reads
+the request body. A rapid-upload match records zero WAN bytes. Retried
+multipart data is counted again because it was transmitted again. Current
+usage is available to administrators at `/api/admin/restic/usage`.
+
+Configuration and recovery examples are in
+[docs/restic-115-backup.md](docs/restic-115-backup.md).
+
 ## AutoFilm integration
 
 This fork adds a credential-isolated API for Jellyfin-based remote media

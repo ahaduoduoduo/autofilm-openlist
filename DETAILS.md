@@ -1,9 +1,30 @@
-# AutoFilm module map
+# Custom OpenList module map
 
 Updated: 2026-08-06
 
-The upstream OpenList structure is unchanged. AutoFilm-specific responsibilities
-are kept in small modules:
+The upstream OpenList structure is unchanged. Custom responsibilities are kept
+in small modules.
+
+## Restic backup gateway
+
+- `server/restic/handler.go`: Restic REST v1/v2 protocol, repository mapping,
+  basic authentication, immutable object reads and writes, Range responses,
+  and two-character sharding for data packs.
+- `server/restic.go`: `/restic/{repository}/` registration on the main OpenList
+  HTTP service.
+- `internal/resticquota/quota.go`: provider-upload byte accounting, shared and
+  per-repository rates, daily/monthly calendar limits, and usage snapshots.
+- `internal/model/restic_traffic_usage.go` and
+  `internal/db/restic_traffic_usage.go`: one durable actual-upload counter per
+  repository and day.
+- `drivers/115/util.go`: wraps only the 115 OSS body readers associated with a
+  Restic request. Local hashing and 115 rapid-upload checks are not counted.
+- `server/handles/restic.go`: administrator-only usage response consumed by the
+  customized backup console.
+- `docs/restic-115-backup.md`: deployment, repository, quota, and recovery
+  reference.
+
+## AutoFilm integration
 
 - `internal/driver/autofilm.go`: provider-neutral authentication, passive
   authentication state, and scheduler contracts.
@@ -44,5 +65,5 @@ are kept in small modules:
 - `Dockerfile.autofilm`: builds the modified OpenList binary for the isolated
   integration image.
 
-The wire protocol and failure semantics are documented in
+The AutoFilm protocol and failure semantics are documented in
 `docs/autofilm-remote-api.md`.

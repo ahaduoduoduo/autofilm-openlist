@@ -41,6 +41,7 @@ func Init(e *gin.Engine) {
 	}
 	WebDav(g.Group("/dav"))
 	S3(g.Group("/s3"))
+	Restic(g.Group("/restic"))
 	MCP(g)
 
 	downloadLimiter := middlewares.DownloadRateLimiter(stream.ClientDownloadLimit)
@@ -187,6 +188,9 @@ func admin(g *gin.RouterGroup) {
 	scan.POST("/start", handles.StartManualScan)
 	scan.POST("/stop", handles.StopManualScan)
 	scan.GET("/progress", handles.GetManualScanProgress)
+
+	restic := g.Group("/restic")
+	restic.GET("/usage", handles.ResticUsage)
 
 	autoFilm(g.Group("/autofilm"))
 }

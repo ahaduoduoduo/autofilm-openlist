@@ -88,6 +88,25 @@ type S3 struct {
 	SSL    bool `json:"ssl" env:"SSL"`
 }
 
+type ResticRepository struct {
+	Name               string  `json:"name"`
+	Path               string  `json:"path"`
+	UploadMiBPerSecond float64 `json:"upload_mib_per_second"`
+	DailyUploadGiB     float64 `json:"daily_upload_gib"`
+	MonthlyUploadGiB   float64 `json:"monthly_upload_gib"`
+}
+
+type Restic struct {
+	Enable             bool               `json:"enable" env:"ENABLE"`
+	Username           string             `json:"username" env:"USERNAME"`
+	Password           string             `json:"password" env:"PASSWORD"`
+	Timezone           string             `json:"timezone" env:"TIMEZONE"`
+	UploadMiBPerSecond float64            `json:"upload_mib_per_second" env:"UPLOAD_MIB_PER_SECOND"`
+	DailyUploadGiB     float64            `json:"daily_upload_gib" env:"DAILY_UPLOAD_GIB"`
+	MonthlyUploadGiB   float64            `json:"monthly_upload_gib" env:"MONTHLY_UPLOAD_GIB"`
+	Repositories       []ResticRepository `json:"repositories"`
+}
+
 type FTP struct {
 	Enable                  bool   `json:"enable" env:"ENABLE"`
 	Listen                  string `json:"listen" env:"LISTEN"`
@@ -133,6 +152,7 @@ type Config struct {
 	Tasks                 TasksConfig `json:"tasks" envPrefix:"TASKS_"`
 	Cors                  Cors        `json:"cors" envPrefix:"CORS_"`
 	S3                    S3          `json:"s3" envPrefix:"S3_"`
+	Restic                Restic      `json:"restic" envPrefix:"RESTIC_"`
 	FTP                   FTP         `json:"ftp" envPrefix:"FTP_"`
 	SFTP                  SFTP        `json:"sftp" envPrefix:"SFTP_"`
 	MCP                   MCP         `json:"mcp" envPrefix:"MCP_"`
@@ -232,6 +252,10 @@ func DefaultConfig(dataDir string) *Config {
 			Enable: false,
 			Port:   5246,
 			SSL:    false,
+		},
+		Restic: Restic{
+			Enable:   false,
+			Timezone: "Asia/Shanghai",
 		},
 		FTP: FTP{
 			Enable:                  false,
