@@ -28,6 +28,7 @@ env:
 
 jobs:
   build_binary:
+    if: github.event_name != 'workflow_dispatch'
     name: Build Binaries for Docker Release (Beta)
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +69,7 @@ jobs:
             !build/musl-libs/**
 
   release_docker:
+    if: github.event_name != 'workflow_dispatch'
     needs: build_binary
     name: Release Docker image (Beta)
     runs-on: ubuntu-latest
@@ -148,3 +150,57 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ env.RELEASE_PLATFORMS }}
+
+  release_deployment_amd64:
+    if: github.event_name == 'workflow_dispatch'
+    name: Release deployment image (linux/amd64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.4'
+
+      - name: Cache amd64 musl compiler
+        id: cache-musl-amd64
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/musl-libs
+          key: docker-musl-amd64-v1
+
+      - name: Download amd64 musl compiler
+        if: steps.cache-musl-amd64.outputs.cache-hit != 'true'
+        run: bash build.sh prepare docker-amd64
+
+      - name: Build amd64 binary
+        run: bash build.sh beta docker-amd64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push deployment image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile.ci
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/ahaduoduoduo/autofilm-openlist-restic:gateway
+            ghcr.io/ahaduoduoduo/autofilm-openlist-restic:sha-${{ github.sha }}
