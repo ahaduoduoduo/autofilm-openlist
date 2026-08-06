@@ -11,6 +11,18 @@ func TestObjectPath(t *testing.T) {
 	}
 }
 
+func TestValidObjectName(t *testing.T) {
+	valid := "245bc4c430d393f74fbe7b13325e30dbde9fb0745e50caad57c446c93d20096b"
+	if !validObjectName(valid) {
+		t.Fatal("expected Restic object ID to be valid")
+	}
+	for _, invalid := range []string{"..", "abc", valid[:63], valid[:63] + "z"} {
+		if validObjectName(invalid) {
+			t.Fatalf("expected %q to be invalid", invalid)
+		}
+	}
+}
+
 func TestParseRange(t *testing.T) {
 	tests := []struct {
 		value      string

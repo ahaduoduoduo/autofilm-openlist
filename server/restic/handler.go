@@ -3,6 +3,7 @@ package restic
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -89,11 +90,19 @@ func (h *Handler) Handle(c *gin.Context) {
 		h.handleList(c, repository, parts[0])
 		return
 	}
-	if len(parts) != 2 || parts[1] == "" || strings.ContainsAny(parts[1], `/\\`) {
+	if len(parts) != 2 || !validObjectName(parts[1]) {
 		c.String(http.StatusBadRequest, "invalid object name")
 		return
 	}
 	h.handleObject(c, repository, parts[0], parts[1])
+}
+
+func validObjectName(name string) bool {
+	if len(name) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(name)
+	return err == nil
 }
 
 func authenticate(c *gin.Context) bool {
