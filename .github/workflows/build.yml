@@ -10,6 +10,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  restic-unit-test:
+    name: Restic unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.4"
+
+      - name: Test Restic gateway
+        run: go test ./internal/resticquota ./server/restic
+
   build:
     strategy:
       matrix:
