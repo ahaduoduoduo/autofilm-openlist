@@ -15,6 +15,7 @@ func Restic(g *gin.RouterGroup) {
 		return
 	}
 	handler := resticserver.NewHandler()
+	g.GET("/_usage", handler.Usage)
 	g.Any("/:repository", handler.Handle)
 	g.Any("/:repository/*path", handler.Handle)
 }

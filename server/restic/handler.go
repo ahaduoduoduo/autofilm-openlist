@@ -50,6 +50,18 @@ func NewHandler() *Handler {
 	return &Handler{}
 }
 
+func (h *Handler) Usage(c *gin.Context) {
+	if !authenticate(c) {
+		return
+	}
+	usage, err := resticquota.Snapshot()
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, usage)
+}
+
 func (h *Handler) Handle(c *gin.Context) {
 	if !authenticate(c) {
 		return

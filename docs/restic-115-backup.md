@@ -89,6 +89,13 @@ GET /api/admin/restic/usage
 Authorization: Bearer <OpenList administrator token>
 ```
 
+The Backrest console reads the same data with the Restic HTTP credentials:
+
+```text
+GET /restic/_usage
+Authorization: Basic <Restic HTTP credentials>
+```
+
 ## Live Docker and Time Machine data
 
 The remote repository is an off-site disaster copy. The local Hyper Backup and
