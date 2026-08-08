@@ -232,13 +232,13 @@ func (d *Pan115) observeProviderResponse(
 	client *resty.Client,
 	response *resty.Response,
 ) {
-	if response == nil {
+	// Requests that started on a client replaced by QR authentication may
+	// finish later. Their result must not change the health of the new session.
+	if response == nil || d.client == nil || client != d.client.Client {
 		return
 	}
 	if response.StatusCode() >= http.StatusOK &&
-		response.StatusCode() < http.StatusMultipleChoices &&
-		d.client != nil &&
-		client == d.client.Client {
+		response.StatusCode() < http.StatusMultipleChoices {
 		d.clearRiskControl()
 		return
 	}
