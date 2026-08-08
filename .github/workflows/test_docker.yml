@@ -29,8 +29,8 @@ env:
 jobs:
   build_binary:
     if: >-
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'push' && github.repository_owner == 'OpenListTeam')
+      github.event_name != 'workflow_dispatch' &&
+      github.repository_owner == 'OpenListTeam'
     name: Build Binaries for Docker Release (Beta)
     runs-on: ubuntu-latest
     steps:
