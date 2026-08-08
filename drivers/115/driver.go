@@ -211,7 +211,7 @@ func (d *Pan115) Put(
 	// rapid-upload
 	// note that 115 add timeout for rapid-upload,
 	// and "sig invalid" err is thrown even when the hash is correct after timeout.
-	if fastInfo, err = d.rapidUpload(stream.GetSize(), stream.GetName(), dirID, preHash, fullHash, stream); err != nil {
+	if fastInfo, err = d.rapidUpload(ctx, stream.GetSize(), stream.GetName(), dirID, preHash, fullHash, stream); err != nil {
 		return nil, err
 	}
 	if matched, err := fastInfo.Ok(); err != nil {

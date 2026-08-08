@@ -1,6 +1,6 @@
 # Custom OpenList module map
 
-Updated: 2026-08-06
+Updated: 2026-08-08
 
 The upstream OpenList structure is unchanged. Custom responsibilities are kept
 in small modules.
@@ -17,8 +17,12 @@ in small modules.
 - `internal/model/restic_traffic_usage.go` and
   `internal/db/restic_traffic_usage.go`: one durable actual-upload counter per
   repository and day.
-- `drivers/115/util.go`: wraps only the 115 OSS body readers associated with a
-  Restic request. Local hashing and 115 rapid-upload checks are not counted.
+- `drivers/115/util.go`: retries malformed encrypted upload-initialization
+  responses with fresh ECDH sessions before OSS transfer, and wraps only the
+  115 OSS body readers associated with a Restic request. Local hashing and 115
+  rapid-upload checks are not counted.
+- `drivers/115/util_test.go`: upload-initialization retry, exhaustion,
+  non-decode error, and cancellation coverage.
 - `server/handles/restic.go`: administrator-only usage response consumed by the
   customized backup console.
 - `docs/restic-115-backup.md`: deployment, repository, quota, and recovery
