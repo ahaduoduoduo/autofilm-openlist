@@ -1,9 +1,11 @@
 package _115
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
+	"github.com/go-resty/resty/v2"
 )
 
 func TestIsRiskControlError(t *testing.T) {
@@ -46,13 +48,37 @@ func TestGetAutoFilmAuthStateFromPersistedStatus(t *testing.T) {
 func TestGetAutoFilmAuthStateRequiresLoginWhenCredentialIsMissing(t *testing.T) {
 	t.Parallel()
 
-	driver := &Pan115{
-		Storage: model.Storage{Status: missingCredentialStatus},
+	for _, status := range []string{
+		missingCredentialStatus,
+		"bad cookie",
+		"user not login",
+	} {
+		driver := &Pan115{
+			Storage: model.Storage{Status: status},
+		}
+		state := driver.GetAutoFilmAuthState()
+		if state.State != "error" ||
+			state.Authenticated ||
+			!state.RequiresReauthentication {
+			t.Fatalf("unexpected state for %q: %+v", status, state)
+		}
 	}
+}
+
+func TestObserveProviderResponseIgnoresReplacedClient(t *testing.T) {
+	t.Parallel()
+
+	driver := &Pan115{}
+	currentClient := driver.newClient()
+	replacedClient := driver.newClient()
+	driver.client = currentClient
+
+	driver.observeProviderResponse(replacedClient.Client, &resty.Response{
+		RawResponse: &http.Response{StatusCode: http.StatusMethodNotAllowed},
+	})
+
 	state := driver.GetAutoFilmAuthState()
-	if state.State != "error" ||
-		state.Authenticated ||
-		!state.RequiresReauthentication {
-		t.Fatalf("unexpected state: %+v", state)
+	if state.State == "risk_controlled" || state.RequiresReauthentication {
+		t.Fatalf("replaced client changed current authentication state: %+v", state)
 	}
 }

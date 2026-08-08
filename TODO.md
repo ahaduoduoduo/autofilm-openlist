@@ -4,6 +4,15 @@ Updated: 2026-08-09
 
 ## Completed
 
+- [x] 2026-08-09: Keep upstream beta image publication available only to the
+  OpenListTeam repository; this fork uses its Test Build workflow for pull
+  requests and does not build the unused `latest`, `ffmpeg`, `aria2`, and `aio`
+  image matrices.
+- [x] 2026-08-09: Rebuild the 115 client after QR authentication and validate
+  fresh upload identity metadata before persisting the credential, preventing
+  read recovery from leaving uploads on the pre-scan `UserID`/`UserKey` pair;
+  expose persisted `bad cookie` and `user not login` states as requiring QR
+  authentication after a restart.
 - [x] 2026-08-09: Make every fork build default to the AutoFilm OpenList
   frontend and make the amd64/restic deployment image build both repositories
   from source instead of silently falling back to the upstream UI.
