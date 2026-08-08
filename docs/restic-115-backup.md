@@ -6,7 +6,7 @@ The production Synology image is published by manually running
 `autofilm-openlist-restic:gateway` and an immutable commit SHA tag. Regular
 main-branch and pull-request builds keep the upstream multi-platform test matrix.
 
-Updated: 2026-08-06
+Updated: 2026-08-08
 
 ## Architecture
 
@@ -18,6 +18,19 @@ storage mount. For a 115 mount, provider uploads continue through the existing
 The integration does not use WebDAV, rclone, or an S3 compatibility endpoint.
 Restic remains an unmodified upstream binary. The customized Backrest service
 is the scheduler and recovery console.
+
+## 115 upload initialization
+
+Before a normal or multipart OSS transfer, the 115 driver sends an encrypted
+upload-initialization request. The response supplies either a rapid-upload
+match or the OSS upload parameters. This step does not transmit the file body.
+
+Some provider responses can be malformed and fail ECDH/LZ4 decoding with an
+error such as `slice bounds out of range`. OpenList retries only response
+decryption and JSON parsing failures, at most three attempts with a new ECDH
+session and token each time. The delays are 250 milliseconds. Network errors,
+provider business errors, and request cancellation are returned immediately.
+No Restic pack or OSS part is retransmitted by this retry.
 
 ## OpenList configuration
 

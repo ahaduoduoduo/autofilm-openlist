@@ -28,7 +28,25 @@ import (
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
+
+const (
+	uploadInitResponseAttempts   = 3
+	uploadInitResponseRetryDelay = 250 * time.Millisecond
+)
+
+type uploadInitResponseDecodeError struct {
+	err error
+}
+
+func (e *uploadInitResponseDecodeError) Error() string {
+	return fmt.Sprintf("decode 115 upload initialization response: %v", e.err)
+}
+
+func (e *uploadInitResponseDecodeError) Unwrap() error {
+	return e.err
+}
 
 // var UserAgent = driver115.UA115Browser
 func (d *Pan115) login() error {
@@ -130,27 +148,129 @@ func (c *Pan115) GenerateToken(fileID, preID, timeStamp, fileSize, signKey, sign
 	return hex.EncodeToString(tokenMd5[:])
 }
 
-func (d *Pan115) rapidUpload(fileSize int64, fileName, dirID, preID, fileID string, stream model.FileStreamer) (*driver115.UploadInitResp, error) {
+func retryUploadInitResponse(
+	ctx context.Context,
+	attempts int,
+	delay time.Duration,
+	request func() (*driver115.UploadInitResp, error),
+) (*driver115.UploadInitResp, error) {
+	for attempt := 1; attempt <= attempts; attempt++ {
+		result, err := request()
+		if err == nil {
+			return result, nil
+		}
+
+		var decodeErr *uploadInitResponseDecodeError
+		if !errors.As(err, &decodeErr) {
+			return nil, err
+		}
+		if attempt == attempts {
+			return nil, fmt.Errorf(
+				"decode 115 upload initialization response failed after %d attempts: %w",
+				attempts,
+				err,
+			)
+		}
+
+		log.WithError(err).Warnf(
+			"[115] upload initialization response decode failed; retrying (%d/%d)",
+			attempt,
+			attempts,
+		)
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return nil, errors.New("upload initialization response retry attempts must be positive")
+}
+
+func (d *Pan115) requestUploadInit(
+	ctx context.Context,
+	form url.Values,
+	preID string,
+	fileID string,
+	fileSize string,
+	signKey string,
+	signVal string,
+) (*driver115.UploadInitResp, error) {
 	var (
 		ecdhCipher   *cipher.EcdhCipher
 		encrypted    []byte
 		decrypted    []byte
 		encodedToken string
 		err          error
-		target       = "U_1_" + dirID
 		bodyBytes    []byte
 		result       = driver115.UploadInitResp{}
-		fileSizeStr  = strconv.FormatInt(fileSize, 10)
 	)
 	if ecdhCipher, err = cipher.NewEcdhCipher(); err != nil {
 		return nil, err
 	}
 
-	userID := strconv.FormatInt(d.client.UserID, 10)
+	t := driver115.NowMilli()
+	if encodedToken, err = ecdhCipher.EncodeToken(t.ToInt64()); err != nil {
+		return nil, err
+	}
+
+	form.Set("t", t.String())
+	form.Set("token", d.GenerateToken(fileID, preID, t.String(), fileSize, signKey, signVal))
+	if signKey != "" && signVal != "" {
+		form.Set("sign_key", signKey)
+		form.Set("sign_val", signVal)
+	}
+	if encrypted, err = ecdhCipher.Encrypt([]byte(form.Encode())); err != nil {
+		return nil, err
+	}
+
+	req := d.client.NewRequest().
+		SetContext(ctx).
+		SetQueryParam("k_ec", encodedToken).
+		SetBody(encrypted).
+		SetHeaderVerbatim("Content-Type", "application/x-www-form-urlencoded").
+		SetDoNotParseResponse(true)
+	resp, err := req.Post(driver115.ApiUploadInit)
+	if err != nil {
+		return nil, err
+	}
+	data := resp.RawBody()
+	defer data.Close()
+	if bodyBytes, err = io.ReadAll(data); err != nil {
+		return nil, err
+	}
+	if decrypted, err = ecdhCipher.Decrypt(bodyBytes); err != nil {
+		return nil, &uploadInitResponseDecodeError{err: err}
+	}
+	if err = json.Unmarshal(decrypted, &result); err != nil {
+		return nil, &uploadInitResponseDecodeError{err: err}
+	}
+	if err = driver115.CheckErr(nil, &result, resp); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (d *Pan115) rapidUpload(
+	ctx context.Context,
+	fileSize int64,
+	fileName string,
+	dirID string,
+	preID string,
+	fileID string,
+	stream model.FileStreamer,
+) (*driver115.UploadInitResp, error) {
+	target := "U_1_" + dirID
+	fileSizeStr := strconv.FormatInt(fileSize, 10)
 	form := url.Values{}
 	form.Set("appid", "0")
 	form.Set("appversion", appVer)
-	form.Set("userid", userID)
+	form.Set("userid", strconv.FormatInt(d.client.UserID, 10))
 	form.Set("filename", fileName)
 	form.Set("filesize", fileSizeStr)
 	form.Set("fileid", fileID)
@@ -158,61 +278,38 @@ func (d *Pan115) rapidUpload(fileSize int64, fileName, dirID, preID, fileID stri
 	form.Set("sig", d.client.GenerateSignature(fileID, target))
 
 	signKey, signVal := "", ""
-	for retry := true; retry; {
-		t := driver115.NowMilli()
-
-		if encodedToken, err = ecdhCipher.EncodeToken(t.ToInt64()); err != nil {
-			return nil, err
-		}
-
-		params := map[string]string{
-			"k_ec": encodedToken,
-		}
-
-		form.Set("t", t.String())
-		form.Set("token", d.GenerateToken(fileID, preID, t.String(), fileSizeStr, signKey, signVal))
-		if signKey != "" && signVal != "" {
-			form.Set("sign_key", signKey)
-			form.Set("sign_val", signVal)
-		}
-		if encrypted, err = ecdhCipher.Encrypt([]byte(form.Encode())); err != nil {
-			return nil, err
-		}
-
-		req := d.client.NewRequest().
-			SetQueryParams(params).
-			SetBody(encrypted).
-			SetHeaderVerbatim("Content-Type", "application/x-www-form-urlencoded").
-			SetDoNotParseResponse(true)
-		resp, err := req.Post(driver115.ApiUploadInit)
+	for {
+		result, err := retryUploadInitResponse(
+			ctx,
+			uploadInitResponseAttempts,
+			uploadInitResponseRetryDelay,
+			func() (*driver115.UploadInitResp, error) {
+				return d.requestUploadInit(
+					ctx,
+					form,
+					preID,
+					fileID,
+					fileSizeStr,
+					signKey,
+					signVal,
+				)
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
-		data := resp.RawBody()
-		defer data.Close()
-		if bodyBytes, err = io.ReadAll(data); err != nil {
-			return nil, err
-		}
-		if decrypted, err = ecdhCipher.Decrypt(bodyBytes); err != nil {
-			return nil, err
-		}
-		if err = driver115.CheckErr(json.Unmarshal(decrypted, &result), &result, resp); err != nil {
-			return nil, err
-		}
-		if result.Status == 7 {
-			// Update signKey & signVal
-			signKey = result.SignKey
-			signVal, err = UploadDigestRange(stream, result.SignCheck)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			retry = false
-		}
-		result.SHA1 = fileID
-	}
 
-	return &result, nil
+		if result.Status != 7 {
+			result.SHA1 = fileID
+			return result, nil
+		}
+
+		signKey = result.SignKey
+		signVal, err = UploadDigestRange(stream, result.SignCheck)
+		if err != nil {
+			return nil, err
+		}
+	}
 }
 
 func UploadDigestRange(stream model.FileStreamer, rangeSpec string) (result string, err error) {

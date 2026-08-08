@@ -1,9 +1,11 @@
 # Custom OpenList development status
 
-Updated: 2026-08-06
+Updated: 2026-08-08
 
 ## Completed
 
+- [x] 2026-08-08: Retry malformed encrypted 115 upload-initialization
+  responses with a fresh ECDH session before any OSS file data is transmitted.
 - [x] 2026-08-06: Add a manual Synology deployment build that publishes one
   linux/amd64 image with mutable gateway and immutable commit tags.
 - [x] 2026-08-06: Add a native Restic REST v1/v2 endpoint backed by mapped
