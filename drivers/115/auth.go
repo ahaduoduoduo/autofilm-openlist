@@ -213,7 +213,7 @@ func (d *Pan115) GetAutoFilmAuthState() driver.AutoFilmAuthState {
 			State:         "authenticated",
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(status), missingCredentialStatus) {
+	if isCredentialError(status) {
 		return driver.AutoFilmAuthState{
 			Authenticated:            false,
 			State:                    "error",
@@ -226,6 +226,13 @@ func (d *Pan115) GetAutoFilmAuthState() driver.AutoFilmAuthState {
 		State:         "error",
 		Message:       status,
 	}
+}
+
+func isCredentialError(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	return normalized == missingCredentialStatus ||
+		normalized == driver115.ErrBadCookie.Error() ||
+		normalized == "user not login"
 }
 
 func (d *Pan115) observeProviderResponse(
