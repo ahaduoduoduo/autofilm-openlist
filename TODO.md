@@ -4,6 +4,9 @@ Updated: 2026-08-09
 
 ## Completed
 
+- [x] 2026-08-09: Keep upstream beta image publication available only to the
+  OpenListTeam repository; pull requests in this fork compile binaries but do
+  not build the unused `latest`, `ffmpeg`, `aria2`, and `aio` image matrices.
 - [x] 2026-08-09: Rebuild the 115 client after QR authentication and validate
   fresh upload identity metadata before persisting the credential, preventing
   read recovery from leaving uploads on the pre-scan `UserID`/`UserKey` pair;
