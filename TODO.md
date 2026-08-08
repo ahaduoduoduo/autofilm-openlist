@@ -7,6 +7,9 @@ Updated: 2026-08-09
 - [x] 2026-08-09: Make every fork build default to the AutoFilm OpenList
   frontend and make the amd64/restic deployment image build both repositories
   from source instead of silently falling back to the upstream UI.
+- [x] 2026-08-09: Expose missing 115 credentials as a passive
+  `requires_reauthentication` state so Core can distribute a QR code after a
+  risk-control restart without probing 115.
 - [x] 2026-08-08: Retry malformed encrypted 115 upload-initialization
   responses with a fresh ECDH session before any OSS file data is transmitted.
 - [x] 2026-08-06: Add a manual Synology deployment build that publishes one

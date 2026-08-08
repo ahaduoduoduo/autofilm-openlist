@@ -42,3 +42,17 @@ func TestGetAutoFilmAuthStateFromPersistedStatus(t *testing.T) {
 		t.Fatalf("unexpected state: %+v", state)
 	}
 }
+
+func TestGetAutoFilmAuthStateRequiresLoginWhenCredentialIsMissing(t *testing.T) {
+	t.Parallel()
+
+	driver := &Pan115{
+		Storage: model.Storage{Status: missingCredentialStatus},
+	}
+	state := driver.GetAutoFilmAuthState()
+	if state.State != "error" ||
+		state.Authenticated ||
+		!state.RequiresReauthentication {
+		t.Fatalf("unexpected state: %+v", state)
+	}
+}

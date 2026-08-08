@@ -34,8 +34,9 @@ in small modules.
   authentication state, and scheduler contracts.
 - `drivers/115/scheduler.go`: per-account HTTP rate limiting and operation
   concurrency.
-- `drivers/115/auth.go`: expiring QR sessions and HTTP 405 state recording;
-  credentials remain inside OpenList, and reading state never calls 115.
+- `drivers/115/auth.go`: expiring QR sessions, HTTP 405 state recording, and
+  explicit reauthentication state for missing credentials; credentials remain
+  inside OpenList, and reading state never calls 115.
 - `server/handles/autofilm.go`: authenticated object, exact same-storage move,
   deletion, QR, scheduler, in-memory offline-task snapshot, and task-scoped
   provider cancellation;

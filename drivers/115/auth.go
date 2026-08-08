@@ -19,6 +19,7 @@ const (
 	authSessionTTL      = 5 * time.Minute
 	riskControlStatus   = "115 risk control detected (HTTP 405); QR re-authentication is required"
 	riskControlHTTPCode = http.StatusMethodNotAllowed
+	missingCredentialStatus = "missing cookie or qrcode account"
 )
 
 type authSession struct {
@@ -186,6 +187,14 @@ func (d *Pan115) GetAutoFilmAuthState() driver.AutoFilmAuthState {
 		return driver.AutoFilmAuthState{
 			Authenticated: true,
 			State:         "authenticated",
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(status), missingCredentialStatus) {
+		return driver.AutoFilmAuthState{
+			Authenticated:            false,
+			State:                    "error",
+			RequiresReauthentication: true,
+			Message:                  status,
 		}
 	}
 	return driver.AutoFilmAuthState{
