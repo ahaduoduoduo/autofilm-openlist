@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
+	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -69,8 +70,8 @@ func TestObserveProviderResponseIgnoresReplacedClient(t *testing.T) {
 	t.Parallel()
 
 	driver := &Pan115{}
-	currentClient := driver.newClient()
-	replacedClient := driver.newClient()
+	currentClient := driver115.New()
+	replacedClient := driver115.New()
 	driver.client = currentClient
 
 	driver.observeProviderResponse(replacedClient.Client, &resty.Response{

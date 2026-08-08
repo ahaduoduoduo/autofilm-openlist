@@ -8,6 +8,8 @@ Updated: 2026-08-09
   OpenListTeam repository; this fork uses its Test Build workflow for pull
   requests and does not build the unused `latest`, `ffmpeg`, `aria2`, and `aio`
   image matrices.
+- [x] 2026-08-09: Run 115 driver tests in the pull-request test workflow and
+  keep the replaced-client test independent from initialized server config.
 - [x] 2026-08-09: Rebuild the 115 client after QR authentication and validate
   fresh upload identity metadata before persisting the credential, preventing
   read recovery from leaving uploads on the pre-scan `UserID`/`UserKey` pair;
