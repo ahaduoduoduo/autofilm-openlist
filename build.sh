@@ -4,8 +4,9 @@ builtAt="$(date +'%F %T %z')"
 gitAuthor="The OpenList Projects Contributors <noreply@openlist.team>"
 gitCommit=$(git log --pretty=format:"%h" -1)
 
-# Set frontend repository, default to OpenListTeam/OpenList-Frontend
-frontendRepo="${FRONTEND_REPO:-OpenListTeam/OpenList-Frontend}"
+# This fork always ships the matching AutoFilm frontend. Keeping the default in
+# source also covers new branches and builds without repository variables.
+frontendRepo="${FRONTEND_REPO:-ahaduoduoduo/autofilm-openlist-frontend}"
 
 githubAuthArgs=""
 if [ -n "$GITHUB_TOKEN" ]; then

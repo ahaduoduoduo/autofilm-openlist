@@ -66,8 +66,9 @@ in small modules.
   `provider_submitted_at` after provider acceptance, plus `result_path` after
   completion. The provider task ID controls retry timing only and is not a
   persistent media object ID.
-- `Dockerfile.autofilm`: builds the modified OpenList binary for the isolated
-  integration image.
+- `Dockerfile.autofilm`: builds the modified OpenList binary together with the
+  AutoFilm OpenList frontend. Deployment images check out the frontend `main`
+  branch explicitly, so backend branch names do not change the embedded UI.
 
 The AutoFilm protocol and failure semantics are documented in
 `docs/autofilm-remote-api.md`.
