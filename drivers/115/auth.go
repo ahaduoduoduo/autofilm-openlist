@@ -129,21 +129,45 @@ func (d *Pan115) GetAutoFilmAuth(
 			session.message = loginErr.Error()
 			return session.response(), nil
 		}
-		d.client.ImportCredential(credential)
-		if checkErr := d.client.CookieCheck(); checkErr != nil {
+		replacementClient, checkErr := d.newAuthenticatedClient(credential)
+		if checkErr != nil {
 			session.state = "failed"
 			session.message = checkErr.Error()
 			return session.response(), nil
 		}
-		d.clearRiskControl()
+
+		// Replace the whole client only after both login and upload metadata have
+		// been validated. Mutating the previous client's cookie jar leaves its
+		// UserID/Userkey pair from the pre-scan session in memory, which makes the
+		// next upload initialization fail even though reads already work.
 		d.Cookie = credential.Cookie()
 		d.QRCodeToken = ""
+		d.client = replacementClient
+		d.clearRiskControl()
 		d.GetStorage().SetStatus(op.WORK)
 		op.MustSaveDriverStorage(d)
 		session.state = "confirmed"
 		session.message = "storage authentication restored"
 	}
 	return session.response(), nil
+}
+
+func (d *Pan115) newAuthenticatedClient(
+	credential *driver115.Credential,
+) (*driver115.Pan115Client, error) {
+	client := d.newClient()
+	client.ImportCredential(credential)
+	if err := client.CookieCheck(); err != nil {
+		return nil, fmt.Errorf("validate refreshed 115 credential: %w", err)
+	}
+	available, err := client.UploadAvailable()
+	if err != nil {
+		return nil, fmt.Errorf("refresh 115 upload identity: %w", err)
+	}
+	if !available {
+		return nil, errors.New("refreshed 115 credential cannot upload")
+	}
+	return client, nil
 }
 
 func (d *Pan115) GetAutoFilmAuthQRCode(sessionID string) ([]byte, error) {

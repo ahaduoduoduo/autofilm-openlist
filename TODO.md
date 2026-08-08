@@ -4,6 +4,9 @@ Updated: 2026-08-09
 
 ## Completed
 
+- [x] 2026-08-09: Rebuild the 115 client after QR authentication and validate
+  fresh upload identity metadata before persisting the credential, preventing
+  read recovery from leaving uploads on the pre-scan `UserID`/`UserKey` pair.
 - [x] 2026-08-09: Make every fork build default to the AutoFilm OpenList
   frontend and make the amd64/restic deployment image build both repositories
   from source instead of silently falling back to the upstream UI.
