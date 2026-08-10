@@ -1,9 +1,12 @@
 # Custom OpenList development status
 
-Updated: 2026-08-09
+Updated: 2026-08-11
 
 ## Completed
 
+- [x] 2026-08-11: Route only Restic uploads up to 64 MiB through ordinary OSS
+  PutObject, while preserving the existing 10 MiB threshold for every other
+  OpenList upload.
 - [x] 2026-08-10: Track committed Restic object sizes in a persistent local
   inventory, expose current repository occupancy in the usage API, and add an
   authenticated local-index seed operation for repositories that already

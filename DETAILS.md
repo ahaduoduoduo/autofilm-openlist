@@ -1,6 +1,6 @@
 # Custom OpenList module map
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 The upstream OpenList structure is unchanged. Custom responsibilities are kept
 in small modules.
@@ -25,6 +25,11 @@ in small modules.
   responses with fresh ECDH sessions before OSS transfer, and wraps only the
   115 OSS body readers associated with a Restic request. Local hashing and 115
   rapid-upload checks are not counted.
+- `drivers/115/driver.go`: selects ordinary OSS upload for Restic objects up to
+  64 MiB by reading the Restic request context. All non-Restic uploads retain
+  the original 10 MiB ordinary-upload threshold.
+- `drivers/115/driver_test.go`: verifies the separate Restic and general
+  upload thresholds without contacting 115.
 - `drivers/115/util_test.go`: upload-initialization retry, exhaustion,
   non-decode error, and cancellation coverage.
 - `server/handles/restic.go`: administrator-only usage response consumed by the

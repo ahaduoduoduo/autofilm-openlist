@@ -8,12 +8,26 @@ import (
 
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
+	"github.com/OpenListTeam/OpenList/v4/internal/resticquota"
 	streamPkg "github.com/OpenListTeam/OpenList/v4/internal/stream"
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/pkg/errors"
 )
+
+const (
+	ordinaryOSSUploadLimit       int64 = 10 * utils.MB
+	resticOrdinaryOSSUploadLimit int64 = 64 * utils.MB
+)
+
+func shouldUseOrdinaryOSSUpload(ctx context.Context, size int64) bool {
+	limit := ordinaryOSSUploadLimit
+	if resticquota.FromContext(ctx) != nil {
+		limit = resticOrdinaryOSSUploadLimit
+	}
+	return size <= limit
+}
 
 type Pan115 struct {
 	model.Storage
@@ -226,7 +240,7 @@ func (d *Pan115) Put(
 
 	var uploadResult *UploadResult
 	// 闪传失败，上传
-	if stream.GetSize() <= 10*utils.MB { // 文件大小小于10MB，改用普通模式上传
+	if shouldUseOrdinaryOSSUpload(ctx, stream.GetSize()) {
 		if uploadResult, err = d.UploadByOSS(ctx, &fastInfo.UploadOSSParams, stream, dirID, up); err != nil {
 			d.observeProviderError(err)
 			return nil, err
