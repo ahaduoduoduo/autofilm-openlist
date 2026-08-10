@@ -122,16 +122,23 @@ particular backup. OpenList updates this persistent local inventory after each
 successful Restic upload or deletion, so normal dashboard refreshes do not
 enumerate 115.
 
-An existing repository must be reconciled once after this feature is deployed:
+An existing repository must be seeded once from a trusted local Restic index
+cache after this feature is deployed:
 
 ```text
-POST /restic/_usage/refresh
+POST /restic/_usage/seed
 Authorization: Basic <Restic HTTP credentials>
+Content-Type: application/json
+
+{"repositories":[{"name":"synology","objects":[...]}]}
 ```
 
-This explicit operation lists the configured repository and replaces the
-local inventory. It can take several minutes on 115 and should run while no
-Restic operation is active. It is not part of periodic dashboard refreshes.
+The manifest contains Restic object names and byte sizes derived from the
+client's encrypted index cache. Importing it replaces the local inventory and
+does not read the remote provider. OpenList intentionally has no remote
+reconciliation endpoint: enumerating an existing sharded repository would
+generate hundreds of 115 directory-list requests. Newly created repositories
+are initialized automatically before their first object is uploaded.
 
 ## Live Docker and Time Machine data
 

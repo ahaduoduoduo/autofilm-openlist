@@ -47,6 +47,21 @@ type listEntry struct {
 	Size int64  `json:"size"`
 }
 
+type inventorySeedRequest struct {
+	Repositories []repositoryInventorySeed `json:"repositories"`
+}
+
+type repositoryInventorySeed struct {
+	Name    string                `json:"name"`
+	Objects []repositoryObjectSeed `json:"objects"`
+}
+
+type repositoryObjectSeed struct {
+	ObjectType string `json:"object_type"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+}
+
 type byteRange struct {
 	start  int64
 	length int64
@@ -68,23 +83,42 @@ func (h *Handler) Usage(c *gin.Context) {
 	c.JSON(http.StatusOK, usage)
 }
 
-// RefreshUsage reconciles the local object-size inventory with the remote
-// repository. It is intentionally explicit because enumerating an existing
-// 115 repository can take several minutes and must not run on every dashboard
-// refresh.
-func (h *Handler) RefreshUsage(c *gin.Context) {
+// SeedUsage imports an object inventory derived from a trusted local Restic
+// index cache. It deliberately accepts a manifest instead of enumerating the
+// provider because a sharded repository would otherwise require hundreds of
+// directory-list requests on 115.
+func (h *Handler) SeedUsage(c *gin.Context) {
 	if !authenticate(c) {
+		return
+	}
+	var request inventorySeedRequest
+	if err := c.ShouldBindJSON(&request); err != nil || len(request.Repositories) == 0 {
+		c.String(http.StatusBadRequest, "invalid inventory manifest")
 		return
 	}
 	repositoryInventoryMu.Lock()
 	defer repositoryInventoryMu.Unlock()
-	for _, repository := range conf.Conf.Restic.Repositories {
-		objects, err := scanRepositoryObjects(c, repository)
-		if err != nil {
-			writeStorageError(c, err)
+	seenRepositories := make(map[string]struct{}, len(request.Repositories))
+	validated := make(map[string][]model.ResticRepositoryObject, len(request.Repositories))
+	for _, seed := range request.Repositories {
+		if _, duplicate := seenRepositories[seed.Name]; duplicate {
+			c.String(http.StatusBadRequest, "duplicate repository inventory")
 			return
 		}
-		if err := db.ReplaceResticRepositoryObjects(repository.Name, objects); err != nil {
+		seenRepositories[seed.Name] = struct{}{}
+		if _, ok := findRepository(seed.Name); !ok {
+			c.String(http.StatusBadRequest, "unknown repository")
+			return
+		}
+		objects, err := validateInventoryObjects(seed.Objects)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return
+		}
+		validated[seed.Name] = objects
+	}
+	for repository, objects := range validated {
+		if err := db.ReplaceResticRepositoryObjects(repository, objects); err != nil {
 			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -97,31 +131,28 @@ func (h *Handler) RefreshUsage(c *gin.Context) {
 	c.JSON(http.StatusOK, usage)
 }
 
-func scanRepositoryObjects(c *gin.Context, repository conf.ResticRepository) ([]model.ResticRepositoryObject, error) {
-	objects := make([]model.ResticRepositoryObject, 0)
-	configPath := path.Join(repository.Path, "config")
-	configObject, err := fs.Get(withMeta(c, configPath), configPath, &fs.GetArgs{NoLog: true})
-	if err == nil && !configObject.IsDir() {
+func validateInventoryObjects(seeds []repositoryObjectSeed) ([]model.ResticRepositoryObject, error) {
+	objects := make([]model.ResticRepositoryObject, 0, len(seeds))
+	seen := make(map[string]struct{}, len(seeds))
+	for _, seed := range seeds {
+		validConfig := seed.ObjectType == "config" && seed.Name == "config"
+		_, validRepositoryType := repositoryTypes[seed.ObjectType]
+		if !validConfig && (!validRepositoryType || !validObjectName(seed.Name)) {
+			return nil, errors.New("invalid inventory object")
+		}
+		if seed.Size < 0 {
+			return nil, errors.New("invalid inventory object size")
+		}
+		key := seed.ObjectType + "\x00" + seed.Name
+		if _, duplicate := seen[key]; duplicate {
+			return nil, errors.New("duplicate inventory object")
+		}
+		seen[key] = struct{}{}
 		objects = append(objects, model.ResticRepositoryObject{
-			ObjectType: "config",
-			Name:       "config",
-			Size:       configObject.GetSize(),
+			ObjectType: seed.ObjectType,
+			Name:       seed.Name,
+			Size:       seed.Size,
 		})
-	} else if err != nil && !errs.IsObjectNotFound(err) && !errs.IsNotFoundError(err) {
-		return nil, err
-	}
-	for _, objectType := range []string{"data", "index", "keys", "locks", "snapshots"} {
-		entries, err := listObjects(c, repository, objectType)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			objects = append(objects, model.ResticRepositoryObject{
-				ObjectType: objectType,
-				Name:       entry.Name,
-				Size:       entry.Size,
-			})
-		}
 	}
 	return objects, nil
 }
@@ -216,7 +247,7 @@ func createRepository(c *gin.Context, repository conf.ResticRepository) error {
 			return err
 		}
 	}
-	return nil
+	return db.ReplaceResticRepositoryObjects(repository.Name, nil)
 }
 
 func (h *Handler) handleList(c *gin.Context, repository conf.ResticRepository, objectType string) {
