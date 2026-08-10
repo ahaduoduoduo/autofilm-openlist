@@ -23,6 +23,34 @@ func TestValidObjectName(t *testing.T) {
 	}
 }
 
+func TestValidateInventoryObjects(t *testing.T) {
+	validID := "245bc4c430d393f74fbe7b13325e30dbde9fb0745e50caad57c446c93d20096b"
+	objects, err := validateInventoryObjects([]repositoryObjectSeed{
+		{ObjectType: "config", Name: "config", Size: 155},
+		{ObjectType: "data", Name: validID, Size: 1024},
+	})
+	if err != nil {
+		t.Fatalf("validateInventoryObjects() error = %v", err)
+	}
+	if len(objects) != 2 || objects[1].Size != 1024 {
+		t.Fatalf("validateInventoryObjects() = %+v", objects)
+	}
+
+	invalid := [][]repositoryObjectSeed{
+		{{ObjectType: "data", Name: "invalid", Size: 1}},
+		{{ObjectType: "data", Name: validID, Size: -1}},
+		{
+			{ObjectType: "index", Name: validID, Size: 1},
+			{ObjectType: "index", Name: validID, Size: 1},
+		},
+	}
+	for _, seeds := range invalid {
+		if _, err := validateInventoryObjects(seeds); err == nil {
+			t.Fatalf("expected invalid inventory seeds %+v to fail", seeds)
+		}
+	}
+}
+
 func TestParseRange(t *testing.T) {
 	tests := []struct {
 		value      string

@@ -14,8 +14,8 @@ type ResticRepositoryObject struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// ResticRepositoryInventory marks whether the local object inventory has been
-// reconciled with an existing remote repository at least once.
+// ResticRepositoryInventory marks whether the local object inventory was
+// initialized when the repository was created or seeded from a trusted index.
 type ResticRepositoryInventory struct {
 	Repository  string    `json:"repository" gorm:"primaryKey;size:128"`
 	Initialized bool      `json:"initialized"`

@@ -128,7 +128,8 @@ multipart data is counted again because it was transmitted again. Current
 usage is available to administrators at `/api/admin/restic/usage`.
 The same response exposes a persistent repository-object inventory, allowing
 the backup console to show current remote Restic occupancy without repeatedly
-enumerating 115.
+enumerating 115. Existing repositories are initialized from a trusted local
+Restic index manifest; the gateway does not scan remote data shards.
 
 The 115 upload-initialization response is decoded before either normal or
 multipart transfer begins. Malformed encrypted responses are retried up to
