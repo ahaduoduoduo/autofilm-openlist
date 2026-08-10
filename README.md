@@ -126,6 +126,9 @@ standard Restic layout and can be opened by any Restic client.
 the request body. A rapid-upload match records zero WAN bytes. Retried
 multipart data is counted again because it was transmitted again. Current
 usage is available to administrators at `/api/admin/restic/usage`.
+The same response exposes a persistent repository-object inventory, allowing
+the backup console to show current remote Restic occupancy without repeatedly
+enumerating 115.
 
 The 115 upload-initialization response is decoded before either normal or
 multipart transfer begins. Malformed encrypted responses are retried up to

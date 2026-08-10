@@ -13,9 +13,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/db"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
@@ -24,6 +26,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -34,6 +37,8 @@ const (
 var repositoryTypes = map[string]struct{}{
 	"data": {}, "index": {}, "keys": {}, "locks": {}, "snapshots": {},
 }
+
+var repositoryInventoryMu sync.Mutex
 
 type Handler struct{}
 
@@ -61,6 +66,64 @@ func (h *Handler) Usage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, usage)
+}
+
+// RefreshUsage reconciles the local object-size inventory with the remote
+// repository. It is intentionally explicit because enumerating an existing
+// 115 repository can take several minutes and must not run on every dashboard
+// refresh.
+func (h *Handler) RefreshUsage(c *gin.Context) {
+	if !authenticate(c) {
+		return
+	}
+	repositoryInventoryMu.Lock()
+	defer repositoryInventoryMu.Unlock()
+	for _, repository := range conf.Conf.Restic.Repositories {
+		objects, err := scanRepositoryObjects(c, repository)
+		if err != nil {
+			writeStorageError(c, err)
+			return
+		}
+		if err := db.ReplaceResticRepositoryObjects(repository.Name, objects); err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	usage, err := resticquota.Snapshot()
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, usage)
+}
+
+func scanRepositoryObjects(c *gin.Context, repository conf.ResticRepository) ([]model.ResticRepositoryObject, error) {
+	objects := make([]model.ResticRepositoryObject, 0)
+	configPath := path.Join(repository.Path, "config")
+	configObject, err := fs.Get(withMeta(c, configPath), configPath, &fs.GetArgs{NoLog: true})
+	if err == nil && !configObject.IsDir() {
+		objects = append(objects, model.ResticRepositoryObject{
+			ObjectType: "config",
+			Name:       "config",
+			Size:       configObject.GetSize(),
+		})
+	} else if err != nil && !errs.IsObjectNotFound(err) && !errs.IsNotFoundError(err) {
+		return nil, err
+	}
+	for _, objectType := range []string{"data", "index", "keys", "locks", "snapshots"} {
+		entries, err := listObjects(c, repository, objectType)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			objects = append(objects, model.ResticRepositoryObject{
+				ObjectType: objectType,
+				Name:       entry.Name,
+				Size:       entry.Size,
+			})
+		}
+	}
+	return objects, nil
 }
 
 func (h *Handler) Handle(c *gin.Context) {
@@ -222,11 +285,21 @@ func (h *Handler) handleObject(c *gin.Context, repository conf.ResticRepository,
 	case http.MethodGet:
 		h.getObject(c, objectPath, name)
 	case http.MethodPost:
-		h.putObject(c, repository, objectPath, name)
+		h.putObject(c, repository, objectType, objectPath, name)
 	case http.MethodDelete:
 		if err := fs.Remove(withMeta(c, objectPath), objectPath); err != nil {
 			writeStorageError(c, err)
 			return
+		}
+		repositoryInventoryMu.Lock()
+		err := db.DeleteResticRepositoryObject(repository.Name, objectType, name)
+		repositoryInventoryMu.Unlock()
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{
+				"repository": repository.Name,
+				"type":       objectType,
+				"name":       name,
+			}).Error("failed to update Restic repository inventory after delete")
 		}
 		c.Status(http.StatusOK)
 	default:
@@ -291,7 +364,7 @@ func (h *Handler) getObject(c *gin.Context, objectPath, name string) {
 	_, _ = io.Copy(c.Writer, reader)
 }
 
-func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, objectPath, name string) {
+func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, objectType, objectPath, name string) {
 	if c.Request.ContentLength < 0 {
 		c.String(http.StatusLengthRequired, "content length required")
 		return
@@ -328,6 +401,21 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 	if err := tracker.Close(); err != nil {
 		writeStorageError(c, err)
 		return
+	}
+	repositoryInventoryMu.Lock()
+	err := db.UpsertResticRepositoryObject(
+		repository.Name,
+		objectType,
+		name,
+		c.Request.ContentLength,
+	)
+	repositoryInventoryMu.Unlock()
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"repository": repository.Name,
+			"type":       objectType,
+			"name":       name,
+		}).Error("failed to update Restic repository inventory after upload")
 	}
 	c.Status(http.StatusOK)
 }
