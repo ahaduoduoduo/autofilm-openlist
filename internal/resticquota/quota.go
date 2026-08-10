@@ -31,23 +31,30 @@ type Tracker struct {
 }
 
 type RepositoryUsage struct {
-	Name         string `json:"name"`
-	DayBytes     int64  `json:"day_bytes"`
-	DayLimit     int64  `json:"day_limit"`
-	MonthBytes   int64  `json:"month_bytes"`
-	MonthLimit   int64  `json:"month_limit"`
-	RateBytesSec int64  `json:"rate_bytes_per_second"`
+	Name               string `json:"name"`
+	DayBytes           int64  `json:"day_bytes"`
+	DayLimit           int64  `json:"day_limit"`
+	MonthBytes         int64  `json:"month_bytes"`
+	MonthLimit         int64  `json:"month_limit"`
+	RateBytesSec       int64  `json:"rate_bytes_per_second"`
+	StoredBytes        int64  `json:"stored_bytes"`
+	StoredObjects      int64  `json:"stored_objects"`
+	StorageInitialized bool   `json:"storage_initialized"`
+	StorageUpdatedAt   string `json:"storage_updated_at,omitempty"`
 }
 
 type UsageSnapshot struct {
-	Day          string            `json:"day"`
-	Month        string            `json:"month"`
-	DayBytes     int64             `json:"day_bytes"`
-	DayLimit     int64             `json:"day_limit"`
-	MonthBytes   int64             `json:"month_bytes"`
-	MonthLimit   int64             `json:"month_limit"`
-	RateBytesSec int64             `json:"rate_bytes_per_second"`
-	Repositories []RepositoryUsage `json:"repositories"`
+	Day                string            `json:"day"`
+	Month              string            `json:"month"`
+	DayBytes           int64             `json:"day_bytes"`
+	DayLimit           int64             `json:"day_limit"`
+	MonthBytes         int64             `json:"month_bytes"`
+	MonthLimit         int64             `json:"month_limit"`
+	RateBytesSec       int64             `json:"rate_bytes_per_second"`
+	StoredBytes        int64             `json:"stored_bytes"`
+	StoredObjects      int64             `json:"stored_objects"`
+	StorageInitialized bool              `json:"storage_initialized"`
+	Repositories       []RepositoryUsage `json:"repositories"`
 }
 
 type manager struct {
@@ -313,23 +320,38 @@ func Snapshot() (UsageSnapshot, error) {
 		return UsageSnapshot{}, err
 	}
 	snapshot := UsageSnapshot{
-		Day:          m.day,
-		Month:        m.month,
-		DayBytes:     total(m.dayBytes),
-		DayLimit:     bytesFromGiB(conf.Conf.Restic.DailyUploadGiB),
-		MonthBytes:   total(m.monthBytes),
-		MonthLimit:   bytesFromGiB(conf.Conf.Restic.MonthlyUploadGiB),
-		RateBytesSec: bytesFromMiB(conf.Conf.Restic.UploadMiBPerSecond),
+		Day:                m.day,
+		Month:              m.month,
+		DayBytes:           total(m.dayBytes),
+		DayLimit:           bytesFromGiB(conf.Conf.Restic.DailyUploadGiB),
+		MonthBytes:         total(m.monthBytes),
+		MonthLimit:         bytesFromGiB(conf.Conf.Restic.MonthlyUploadGiB),
+		RateBytesSec:       bytesFromMiB(conf.Conf.Restic.UploadMiBPerSecond),
+		StorageInitialized: len(conf.Conf.Restic.Repositories) > 0,
 	}
 	for _, repo := range conf.Conf.Restic.Repositories {
-		snapshot.Repositories = append(snapshot.Repositories, RepositoryUsage{
-			Name:         repo.Name,
-			DayBytes:     m.dayBytes[repo.Name],
-			DayLimit:     bytesFromGiB(repo.DailyUploadGiB),
-			MonthBytes:   m.monthBytes[repo.Name],
-			MonthLimit:   bytesFromGiB(repo.MonthlyUploadGiB),
-			RateBytesSec: bytesFromMiB(repo.UploadMiBPerSecond),
-		})
+		storage, err := db.ResticRepositoryStorageUsage(repo.Name)
+		if err != nil {
+			return UsageSnapshot{}, err
+		}
+		repositoryUsage := RepositoryUsage{
+			Name:               repo.Name,
+			DayBytes:           m.dayBytes[repo.Name],
+			DayLimit:           bytesFromGiB(repo.DailyUploadGiB),
+			MonthBytes:         m.monthBytes[repo.Name],
+			MonthLimit:         bytesFromGiB(repo.MonthlyUploadGiB),
+			RateBytesSec:       bytesFromMiB(repo.UploadMiBPerSecond),
+			StoredBytes:        storage.StoredBytes,
+			StoredObjects:      storage.ObjectCount,
+			StorageInitialized: storage.Initialized,
+		}
+		if !storage.LastVerified.IsZero() {
+			repositoryUsage.StorageUpdatedAt = storage.LastVerified.Format(time.RFC3339)
+		}
+		snapshot.Repositories = append(snapshot.Repositories, repositoryUsage)
+		snapshot.StoredBytes += storage.StoredBytes
+		snapshot.StoredObjects += storage.ObjectCount
+		snapshot.StorageInitialized = snapshot.StorageInitialized && storage.Initialized
 	}
 	return snapshot, nil
 }

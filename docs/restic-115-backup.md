@@ -6,7 +6,7 @@ The production Synology image is published by manually running
 `autofilm-openlist-restic:gateway` and an immutable commit SHA tag. Regular
 main-branch and pull-request builds keep the upstream multi-platform test matrix.
 
-Updated: 2026-08-08
+Updated: 2026-08-10
 
 ## Architecture
 
@@ -114,6 +114,24 @@ The Backrest console reads the same data with the Restic HTTP credentials:
 GET /restic/_usage
 Authorization: Basic <Restic HTTP credentials>
 ```
+
+The usage response also includes `stored_bytes`, `stored_objects`, and
+`storage_initialized`. These values describe the current sum and count of
+files in the remote Restic repository, rather than bytes transmitted by a
+particular backup. OpenList updates this persistent local inventory after each
+successful Restic upload or deletion, so normal dashboard refreshes do not
+enumerate 115.
+
+An existing repository must be reconciled once after this feature is deployed:
+
+```text
+POST /restic/_usage/refresh
+Authorization: Basic <Restic HTTP credentials>
+```
+
+This explicit operation lists the configured repository and replaces the
+local inventory. It can take several minutes on 115 and should run while no
+Restic operation is active. It is not part of periodic dashboard refreshes.
 
 ## Live Docker and Time Machine data
 

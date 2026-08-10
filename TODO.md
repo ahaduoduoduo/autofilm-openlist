@@ -4,6 +4,9 @@ Updated: 2026-08-09
 
 ## Completed
 
+- [x] 2026-08-10: Track committed Restic object sizes in a persistent local
+  inventory, expose current repository occupancy in the usage API, and add an
+  explicit reconciliation operation for repositories that already exist.
 - [x] 2026-08-09: Keep upstream beta image publication available only to the
   OpenListTeam repository; this fork uses its Test Build workflow for pull
   requests and does not build the unused `latest`, `ffmpeg`, `aria2`, and `aio`
