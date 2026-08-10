@@ -1,6 +1,9 @@
 package restic
 
-import "testing"
+import (
+	"encoding/base64"
+	"testing"
+)
 
 func TestObjectPath(t *testing.T) {
 	if got := objectPath("/backup/restic", "data", "abcdef"); got != "/backup/restic/data/ab/abcdef" {
@@ -8,6 +11,27 @@ func TestObjectPath(t *testing.T) {
 	}
 	if got := objectPath("/backup/restic", "snapshots", "abcdef"); got != "/backup/restic/snapshots/abcdef" {
 		t.Fatalf("objectPath() = %q", got)
+	}
+}
+
+func TestParseTaskUsername(t *testing.T) {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte("nas-config"))
+	policy, ok := parseTaskUsername("backrest~"+encoded+"~5368709120~2", "backrest")
+	if !ok {
+		t.Fatal("expected derived task username to be valid")
+	}
+	if policy.ID != "nas-config" || policy.DailyLimitBytes != 5368709120 || policy.Weight != 2 {
+		t.Fatalf("parseTaskUsername() = %+v", policy)
+	}
+	for _, invalid := range []string{
+		"other~" + encoded + "~5368709120~2",
+		"backrest~***~5368709120~2",
+		"backrest~" + encoded + "~0~2",
+		"backrest~" + encoded + "~5368709120~0",
+	} {
+		if _, ok := parseTaskUsername(invalid, "backrest"); ok {
+			t.Fatalf("expected %q to be invalid", invalid)
+		}
 	}
 }
 

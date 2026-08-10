@@ -4,6 +4,9 @@ Updated: 2026-08-11
 
 ## Completed
 
+- [x] 2026-08-11: Add persistent task-level upload allocations and weighted
+  sharing of the existing 115 upload-concurrency pool; completed tasks release
+  unused allocation without changing the global calendar quota.
 - [x] 2026-08-11: Route only Restic uploads up to 64 MiB through ordinary OSS
   PutObject, while preserving the existing 10 MiB threshold for every other
   OpenList upload.

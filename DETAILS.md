@@ -13,14 +13,21 @@ in small modules.
 - `server/restic.go`: `/restic/{repository}/` registration on the main OpenList
   HTTP service.
 - `internal/resticquota/quota.go`: provider-upload byte accounting, shared and
-  per-repository rates, daily/monthly calendar limits, and usage snapshots.
+  per-repository rates, task allocations, released-allocation sharing,
+  daily/monthly calendar limits, and usage snapshots.
 - `internal/model/restic_traffic_usage.go` and
   `internal/db/restic_traffic_usage.go`: one durable actual-upload counter per
   repository and day.
+- `internal/model/restic_task_traffic_usage.go` and
+  `internal/db/restic_task_traffic_usage.go`: durable per-plan usage,
+  allocation, weight, and release state for each repository day.
 - `internal/model/restic_repository_object.go` and
   `internal/db/restic_repository_object.go`: persistent sizes of committed
   Restic objects, used to report current repository occupancy without
   repeatedly listing 115.
+- `drivers/115/weighted_upload_gate.go`: caps account-wide provider uploads and
+  assigns newly free slots to queued Restic tasks using smooth weighted
+  round-robin.
 - `drivers/115/util.go`: retries malformed encrypted upload-initialization
   responses with fresh ECDH sessions before OSS transfer, and wraps only the
   115 OSS body readers associated with a Restic request. Local hashing and 115

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
+	"github.com/OpenListTeam/OpenList/v4/internal/resticquota"
 	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/go-resty/resty/v2"
 	"golang.org/x/time/rate"
@@ -32,7 +33,7 @@ type accountScheduler struct {
 	limiter             *rate.Limiter
 	lists               chan struct{}
 	mutations           chan struct{}
-	uploads             chan struct{}
+	uploads             *weightedUploadGate
 	activeLists         atomic.Int64
 	activeMutations     atomic.Int64
 	activeUploads       atomic.Int64
@@ -80,7 +81,7 @@ func getAccountScheduler(accountKey string, addition *Addition) *accountSchedule
 		limiter:             rate.NewLimiter(rate.Limit(requestRate), 1),
 		lists:               make(chan struct{}, listConcurrency),
 		mutations:           make(chan struct{}, mutationConcurrency),
-		uploads:             make(chan struct{}, uploadConcurrency),
+		uploads:             newWeightedUploadGate(uploadConcurrency),
 	})
 	return value.(*accountScheduler)
 }
@@ -121,7 +122,21 @@ func (s *accountScheduler) acquireMutation(ctx context.Context) (func(), error) 
 }
 
 func (s *accountScheduler) acquireUpload(ctx context.Context) (func(), error) {
-	return acquire(ctx, s.uploads, &s.activeUploads)
+	taskID := ""
+	weight := 1
+	if tracker := resticquota.FromContext(ctx); tracker != nil {
+		taskID = tracker.TaskID()
+		weight = tracker.Weight()
+	}
+	release, err := s.uploads.acquire(ctx, taskID, weight)
+	if err != nil {
+		return nil, err
+	}
+	s.activeUploads.Add(1)
+	return func() {
+		s.activeUploads.Add(-1)
+		release()
+	}, nil
 }
 
 func (s *accountScheduler) snapshot() driver.AutoFilmSchedulerSnapshot {

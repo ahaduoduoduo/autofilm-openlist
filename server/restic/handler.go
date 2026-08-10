@@ -3,6 +3,7 @@ package restic
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -52,7 +53,7 @@ type inventorySeedRequest struct {
 }
 
 type repositoryInventorySeed struct {
-	Name    string                `json:"name"`
+	Name    string                 `json:"name"`
 	Objects []repositoryObjectSeed `json:"objects"`
 }
 
@@ -60,6 +61,13 @@ type repositoryObjectSeed struct {
 	ObjectType string `json:"object_type"`
 	Name       string `json:"name"`
 	Size       int64  `json:"size"`
+}
+
+type releaseTaskRequest struct {
+	Repository      string `json:"repository"`
+	TaskID          string `json:"task_id"`
+	DailyLimitBytes int64  `json:"daily_limit_bytes"`
+	Weight          int    `json:"weight"`
 }
 
 type byteRange struct {
@@ -72,7 +80,7 @@ func NewHandler() *Handler {
 }
 
 func (h *Handler) Usage(c *gin.Context) {
-	if !authenticate(c) {
+	if _, ok := authenticate(c); !ok {
 		return
 	}
 	usage, err := resticquota.Snapshot()
@@ -88,7 +96,7 @@ func (h *Handler) Usage(c *gin.Context) {
 // provider because a sharded repository would otherwise require hundreds of
 // directory-list requests on 115.
 func (h *Handler) SeedUsage(c *gin.Context) {
-	if !authenticate(c) {
+	if _, ok := authenticate(c); !ok {
 		return
 	}
 	var request inventorySeedRequest
@@ -158,7 +166,8 @@ func validateInventoryObjects(seeds []repositoryObjectSeed) ([]model.ResticRepos
 }
 
 func (h *Handler) Handle(c *gin.Context) {
-	if !authenticate(c) {
+	task, ok := authenticate(c)
+	if !ok {
 		return
 	}
 	repository, ok := findRepository(c.Param("repository"))
@@ -173,7 +182,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	}
 	parts := strings.Split(requestPath, "/")
 	if len(parts) == 1 && parts[0] == "config" {
-		h.handleObject(c, repository, "config", "config")
+		h.handleObject(c, repository, "config", "config", task)
 		return
 	}
 	if _, valid := repositoryTypes[parts[0]]; !valid {
@@ -188,7 +197,7 @@ func (h *Handler) Handle(c *gin.Context) {
 		c.String(http.StatusBadRequest, "invalid object name")
 		return
 	}
-	h.handleObject(c, repository, parts[0], parts[1])
+	h.handleObject(c, repository, parts[0], parts[1], task)
 }
 
 func validObjectName(name string) bool {
@@ -199,18 +208,74 @@ func validObjectName(name string) bool {
 	return err == nil
 }
 
-func authenticate(c *gin.Context) bool {
+func authenticate(c *gin.Context) (resticquota.TaskPolicy, bool) {
 	wantUser := conf.Conf.Restic.Username
 	wantPassword := conf.Conf.Restic.Password
 	user, password, ok := c.Request.BasicAuth()
-	if !ok || wantUser == "" || wantPassword == "" ||
-		subtle.ConstantTimeCompare([]byte(user), []byte(wantUser)) != 1 ||
-		subtle.ConstantTimeCompare([]byte(password), []byte(wantPassword)) != 1 {
+	if !ok || wantUser == "" || wantPassword == "" || subtle.ConstantTimeCompare([]byte(password), []byte(wantPassword)) != 1 {
 		c.Header("WWW-Authenticate", `Basic realm="OpenList Restic"`)
 		c.Status(http.StatusUnauthorized)
-		return false
+		return resticquota.TaskPolicy{}, false
 	}
-	return true
+	if subtle.ConstantTimeCompare([]byte(user), []byte(wantUser)) == 1 {
+		return resticquota.TaskPolicy{}, true
+	}
+	policy, valid := parseTaskUsername(user, wantUser)
+	if !valid {
+		c.Status(http.StatusUnauthorized)
+		return resticquota.TaskPolicy{}, false
+	}
+	return policy, true
+}
+
+func parseTaskUsername(user, baseUser string) (resticquota.TaskPolicy, bool) {
+	prefix := baseUser + "~"
+	if !strings.HasPrefix(user, prefix) {
+		return resticquota.TaskPolicy{}, false
+	}
+	parts := strings.Split(strings.TrimPrefix(user, prefix), "~")
+	if len(parts) != 3 {
+		return resticquota.TaskPolicy{}, false
+	}
+	taskBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	limit, limitErr := strconv.ParseInt(parts[1], 10, 64)
+	weight, weightErr := strconv.Atoi(parts[2])
+	if err != nil || limitErr != nil || weightErr != nil || len(taskBytes) == 0 || len(taskBytes) > 192 || limit <= 0 || weight <= 0 || weight > 1000 {
+		return resticquota.TaskPolicy{}, false
+	}
+	return resticquota.TaskPolicy{ID: string(taskBytes), DailyLimitBytes: limit, Weight: weight}, true
+}
+
+func (h *Handler) ReleaseTask(c *gin.Context) {
+	task, ok := authenticate(c)
+	if !ok {
+		return
+	}
+	if task.ID != "" {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	var request releaseTaskRequest
+	if err := c.ShouldBindJSON(&request); err != nil || request.Repository == "" || request.TaskID == "" || request.DailyLimitBytes <= 0 || request.Weight <= 0 || request.Weight > 1000 {
+		c.String(http.StatusBadRequest, "invalid task allocation")
+		return
+	}
+	if _, exists := findRepository(request.Repository); !exists {
+		c.String(http.StatusNotFound, "repository not found")
+		return
+	}
+	if err := resticquota.ReleaseTask(request.Repository, resticquota.TaskPolicy{
+		ID: request.TaskID, DailyLimitBytes: request.DailyLimitBytes, Weight: request.Weight,
+	}); err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	usage, err := resticquota.Snapshot()
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, usage)
 }
 
 func findRepository(name string) (conf.ResticRepository, bool) {
@@ -308,7 +373,7 @@ func listDirectory(c *gin.Context, directory string) ([]model.Obj, error) {
 	return fs.List(ctx, directory, &fs.ListArgs{NoLog: true})
 }
 
-func (h *Handler) handleObject(c *gin.Context, repository conf.ResticRepository, objectType, name string) {
+func (h *Handler) handleObject(c *gin.Context, repository conf.ResticRepository, objectType, name string, task resticquota.TaskPolicy) {
 	objectPath := objectPath(repository.Path, objectType, name)
 	switch c.Request.Method {
 	case http.MethodHead:
@@ -316,7 +381,7 @@ func (h *Handler) handleObject(c *gin.Context, repository conf.ResticRepository,
 	case http.MethodGet:
 		h.getObject(c, objectPath, name)
 	case http.MethodPost:
-		h.putObject(c, repository, objectType, objectPath, name)
+		h.putObject(c, repository, objectType, objectPath, name, task)
 	case http.MethodDelete:
 		if err := fs.Remove(withMeta(c, objectPath), objectPath); err != nil {
 			writeStorageError(c, err)
@@ -395,7 +460,7 @@ func (h *Handler) getObject(c *gin.Context, objectPath, name string) {
 	_, _ = io.Copy(c.Writer, reader)
 }
 
-func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, objectType, objectPath, name string) {
+func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, objectType, objectPath, name string, task resticquota.TaskPolicy) {
 	if c.Request.ContentLength < 0 {
 		c.String(http.StatusLengthRequired, "content length required")
 		return
@@ -405,7 +470,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		writeStorageError(c, err)
 		return
 	}
-	tracker := resticquota.NewTracker(repository.Name)
+	tracker := resticquota.NewTracker(repository.Name, task)
 	ctx := resticquota.WithTracker(withMeta(c, objectPath), tracker)
 	defer tracker.Close()
 	object := &model.Object{

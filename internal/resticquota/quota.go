@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -26,21 +27,38 @@ type contextKey struct{}
 type Tracker struct {
 	manager    *manager
 	repository string
+	task       TaskPolicy
 	errMu      sync.Mutex
 	err        error
 }
 
+type TaskPolicy struct {
+	ID              string
+	DailyLimitBytes int64
+	Weight          int
+}
+
+type TaskUsage struct {
+	ID              string `json:"id"`
+	DayBytes        int64  `json:"day_bytes"`
+	DayLimit        int64  `json:"day_limit"`
+	Weight          int    `json:"weight"`
+	Released        bool   `json:"released"`
+	ReleasedAtBytes int64  `json:"released_at_bytes"`
+}
+
 type RepositoryUsage struct {
-	Name               string `json:"name"`
-	DayBytes           int64  `json:"day_bytes"`
-	DayLimit           int64  `json:"day_limit"`
-	MonthBytes         int64  `json:"month_bytes"`
-	MonthLimit         int64  `json:"month_limit"`
-	RateBytesSec       int64  `json:"rate_bytes_per_second"`
-	StoredBytes        int64  `json:"stored_bytes"`
-	StoredObjects      int64  `json:"stored_objects"`
-	StorageInitialized bool   `json:"storage_initialized"`
-	StorageUpdatedAt   string `json:"storage_updated_at,omitempty"`
+	Name               string      `json:"name"`
+	DayBytes           int64       `json:"day_bytes"`
+	DayLimit           int64       `json:"day_limit"`
+	MonthBytes         int64       `json:"month_bytes"`
+	MonthLimit         int64       `json:"month_limit"`
+	RateBytesSec       int64       `json:"rate_bytes_per_second"`
+	StoredBytes        int64       `json:"stored_bytes"`
+	StoredObjects      int64       `json:"stored_objects"`
+	StorageInitialized bool        `json:"storage_initialized"`
+	StorageUpdatedAt   string      `json:"storage_updated_at,omitempty"`
+	Tasks              []TaskUsage `json:"tasks,omitempty"`
 }
 
 type UsageSnapshot struct {
@@ -68,6 +86,18 @@ type manager struct {
 	reserved        map[string]int64
 	globalLimiter   *rate.Limiter
 	repositoryRates map[string]*rate.Limiter
+	taskBytes       map[taskKey]int64
+	taskDirty       map[taskKey]int64
+	taskReserved    map[taskKey]int64
+	taskLimits      map[taskKey]int64
+	taskWeights     map[taskKey]int
+	taskReleased    map[taskKey]bool
+	taskReleasedAt  map[taskKey]int64
+}
+
+type taskKey struct {
+	repository string
+	task       string
 }
 
 var singleton = newManager()
@@ -79,12 +109,30 @@ func newManager() *manager {
 		dirty:           map[string]int64{},
 		reserved:        map[string]int64{},
 		repositoryRates: map[string]*rate.Limiter{},
+		taskBytes:       map[taskKey]int64{},
+		taskDirty:       map[taskKey]int64{},
+		taskReserved:    map[taskKey]int64{},
+		taskLimits:      map[taskKey]int64{},
+		taskWeights:     map[taskKey]int{},
+		taskReleased:    map[taskKey]bool{},
+		taskReleasedAt:  map[taskKey]int64{},
 	}
 }
 
-func NewTracker(repository string) *Tracker {
-	return &Tracker{manager: singleton, repository: repository}
+func NewTracker(repository string, policies ...TaskPolicy) *Tracker {
+	policy := TaskPolicy{}
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	if policy.Weight <= 0 {
+		policy.Weight = 1
+	}
+	return &Tracker{manager: singleton, repository: repository, task: policy}
 }
+
+func (t *Tracker) TaskID() string { return t.task.ID }
+
+func (t *Tracker) Weight() int { return t.task.Weight }
 
 func WithTracker(ctx context.Context, tracker *Tracker) context.Context {
 	return context.WithValue(ctx, contextKey{}, tracker)
@@ -136,7 +184,7 @@ func (r *trackedReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	allowed, err := r.tracker.manager.reserve(r.tracker.repository, len(p))
+	allowed, err := r.tracker.manager.reserve(r.tracker.repository, r.tracker.task, len(p))
 	if err != nil {
 		if errors.Is(err, ErrQuotaExceeded) {
 			var probe [1]byte
@@ -149,12 +197,12 @@ func (r *trackedReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	if err = r.tracker.manager.wait(r.ctx, r.tracker.repository, allowed); err != nil {
-		r.tracker.manager.finishReservation(r.tracker.repository, int64(allowed), 0)
+		r.tracker.manager.finishReservation(r.tracker.repository, r.tracker.task, int64(allowed), 0)
 		r.tracker.setErr(err)
 		return 0, err
 	}
 	n, readErr := r.reader.Read(p[:allowed])
-	r.tracker.manager.finishReservation(r.tracker.repository, int64(allowed), int64(n))
+	r.tracker.manager.finishReservation(r.tracker.repository, r.tracker.task, int64(allowed), int64(n))
 	if flushErr := r.tracker.manager.flushIfNeeded(); flushErr != nil {
 		r.tracker.setErr(flushErr)
 		if n == 0 {
@@ -164,7 +212,7 @@ func (r *trackedReader) Read(p []byte) (int, error) {
 	return n, readErr
 }
 
-func (m *manager) reserve(repository string, requested int) (int, error) {
+func (m *manager) reserve(repository string, task TaskPolicy, requested int) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.ensurePeriodLocked(); err != nil {
@@ -176,11 +224,56 @@ func (m *manager) reserve(repository string, requested int) (int, error) {
 	allowed = minRemaining(allowed, bytesFromGiB(conf.Conf.Restic.MonthlyUploadGiB), total(m.monthBytes)+total(m.reserved))
 	allowed = minRemaining(allowed, bytesFromGiB(repo.DailyUploadGiB), m.dayBytes[repository]+m.reserved[repository])
 	allowed = minRemaining(allowed, bytesFromGiB(repo.MonthlyUploadGiB), m.monthBytes[repository]+m.reserved[repository])
+	if task.ID != "" && task.DailyLimitBytes > 0 {
+		key := taskKey{repository: repository, task: task.ID}
+		m.rememberTaskLocked(key, task)
+		allowed = min(allowed, m.taskAvailableLocked(key))
+	}
 	if allowed <= 0 {
 		return 0, ErrQuotaExceeded
 	}
 	m.reserved[repository] += allowed
+	if task.ID != "" {
+		m.taskReserved[taskKey{repository: repository, task: task.ID}] += allowed
+	}
 	return int(allowed), nil
+}
+
+func (m *manager) rememberTaskLocked(key taskKey, policy TaskPolicy) {
+	if _, ok := m.taskBytes[key]; !ok {
+		m.taskBytes[key] = 0
+	}
+	m.taskLimits[key] = policy.DailyLimitBytes
+	weight := policy.Weight
+	if weight <= 0 {
+		weight = 1
+	}
+	m.taskWeights[key] = weight
+}
+
+func (m *manager) taskAvailableLocked(key taskKey) int64 {
+	used := m.taskBytes[key] + m.taskReserved[key]
+	ownRemaining := int64(0)
+	if !m.taskReleased[key] {
+		ownRemaining = max(0, m.taskLimits[key]-used)
+	}
+	return ownRemaining + m.sharedRemainingLocked(key.repository)
+}
+
+func (m *manager) sharedRemainingLocked(repository string) int64 {
+	var released, borrowed int64
+	for key, limit := range m.taskLimits {
+		if key.repository != repository {
+			continue
+		}
+		entitlement := limit
+		if m.taskReleased[key] {
+			entitlement = m.taskReleasedAt[key]
+			released += max(0, limit-entitlement)
+		}
+		borrowed += max(0, m.taskBytes[key]+m.taskReserved[key]-entitlement)
+	}
+	return max(0, released-borrowed)
 }
 
 func minRemaining(requested, limit, used int64) int64 {
@@ -190,13 +283,20 @@ func minRemaining(requested, limit, used int64) int64 {
 	return min(requested, max(0, limit-used))
 }
 
-func (m *manager) finishReservation(repository string, reserved, consumed int64) {
+func (m *manager) finishReservation(repository string, task TaskPolicy, reserved, consumed int64) {
 	m.mu.Lock()
 	m.reserved[repository] -= reserved
 	m.dayBytes[repository] += consumed
 	m.monthBytes[repository] += consumed
 	m.dirty[repository] += consumed
 	m.dirtyBytes += consumed
+	if task.ID != "" {
+		key := taskKey{repository: repository, task: task.ID}
+		m.taskReserved[key] -= reserved
+		m.taskBytes[key] += consumed
+		m.taskDirty[key] += consumed
+		m.rememberTaskLocked(key, task)
+	}
 	m.mu.Unlock()
 }
 
@@ -265,6 +365,13 @@ func (m *manager) ensurePeriodLocked() error {
 	m.month = month
 	m.dayBytes = map[string]int64{}
 	m.monthBytes = map[string]int64{}
+	m.taskBytes = map[taskKey]int64{}
+	m.taskDirty = map[taskKey]int64{}
+	m.taskReserved = map[taskKey]int64{}
+	m.taskLimits = map[taskKey]int64{}
+	m.taskWeights = map[taskKey]int{}
+	m.taskReleased = map[taskKey]bool{}
+	m.taskReleasedAt = map[taskKey]int64{}
 	for _, repo := range conf.Conf.Restic.Repositories {
 		dayBytes, err := db.SumResticTrafficUsage(repo.Name, day)
 		if err != nil {
@@ -276,6 +383,18 @@ func (m *manager) ensurePeriodLocked() error {
 		}
 		m.dayBytes[repo.Name] = dayBytes
 		m.monthBytes[repo.Name] = monthBytes
+	}
+	taskUsages, err := db.ListResticTaskTrafficUsage(day)
+	if err != nil {
+		return err
+	}
+	for _, usage := range taskUsages {
+		key := taskKey{repository: usage.Repository, task: usage.Task}
+		m.taskBytes[key] = usage.Bytes
+		m.taskLimits[key] = usage.DailyLimitBytes
+		m.taskWeights[key] = usage.Weight
+		m.taskReleased[key] = usage.Released
+		m.taskReleasedAt[key] = usage.ReleasedAtBytes
 	}
 	return nil
 }
@@ -308,8 +427,51 @@ func (m *manager) flushLocked() error {
 		}
 		delete(m.dirty, repository)
 	}
+	for key, bytes := range m.taskDirty {
+		if err := db.AddResticTaskTrafficUsage(
+			key.repository,
+			key.task,
+			m.day,
+			bytes,
+			m.taskLimits[key],
+			m.taskWeights[key],
+		); err != nil {
+			return err
+		}
+		delete(m.taskDirty, key)
+	}
 	m.dirtyBytes = 0
 	return nil
+}
+
+func ReleaseTask(repository string, policy TaskPolicy) error {
+	if repository == "" || policy.ID == "" || policy.DailyLimitBytes <= 0 {
+		return errors.New("invalid Restic task allocation")
+	}
+	m := singleton
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.ensurePeriodLocked(); err != nil {
+		return err
+	}
+	key := taskKey{repository: repository, task: policy.ID}
+	m.rememberTaskLocked(key, policy)
+	if m.taskReleased[key] {
+		return nil
+	}
+	if err := m.flushLocked(); err != nil {
+		return err
+	}
+	m.taskReleased[key] = true
+	m.taskReleasedAt[key] = m.taskBytes[key]
+	return db.ReleaseResticTaskTrafficUsage(
+		repository,
+		policy.ID,
+		m.day,
+		policy.DailyLimitBytes,
+		m.taskWeights[key],
+		m.taskReleasedAt[key],
+	)
 }
 
 func Snapshot() (UsageSnapshot, error) {
@@ -348,6 +510,22 @@ func Snapshot() (UsageSnapshot, error) {
 		if !storage.LastVerified.IsZero() {
 			repositoryUsage.StorageUpdatedAt = storage.LastVerified.Format(time.RFC3339)
 		}
+		for key, bytes := range m.taskBytes {
+			if key.repository != repo.Name {
+				continue
+			}
+			repositoryUsage.Tasks = append(repositoryUsage.Tasks, TaskUsage{
+				ID:              key.task,
+				DayBytes:        bytes,
+				DayLimit:        m.taskLimits[key],
+				Weight:          m.taskWeights[key],
+				Released:        m.taskReleased[key],
+				ReleasedAtBytes: m.taskReleasedAt[key],
+			})
+		}
+		sort.Slice(repositoryUsage.Tasks, func(i, j int) bool {
+			return repositoryUsage.Tasks[i].ID < repositoryUsage.Tasks[j].ID
+		})
 		snapshot.Repositories = append(snapshot.Repositories, repositoryUsage)
 		snapshot.StoredBytes += storage.StoredBytes
 		snapshot.StoredObjects += storage.ObjectCount
