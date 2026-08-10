@@ -22,6 +22,7 @@ func Init(d *gorm.DB) {
 		new(model.SSHPublicKey),
 		new(model.SharingDB),
 		new(model.ResticTrafficUsage),
+		new(model.ResticTaskTrafficUsage),
 		new(model.ResticRepositoryObject),
 		new(model.ResticRepositoryInventory),
 	)

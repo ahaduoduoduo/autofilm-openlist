@@ -49,8 +49,8 @@ Add a `restic` block to `config.json`. Limits set to `0` are disabled.
     "username": "backrest",
     "password": "replace-with-a-long-random-password",
     "timezone": "Asia/Shanghai",
-    "upload_mib_per_second": 4,
-    "daily_upload_gib": 80,
+    "upload_mib_per_second": 0,
+    "daily_upload_gib": 50,
     "monthly_upload_gib": 1500,
     "repositories": [
       {
@@ -66,8 +66,8 @@ Add a `restic` block to `config.json`. Limits set to `0` are disabled.
 ```
 
 The shared limits apply to all configured repositories. A non-zero repository
-limit adds a narrower limit for that repository. Rate values use MiB/s; calendar
-allowances use GiB.
+limit adds a narrower limit for that repository. Rate values use MiB/s; `0`
+means unlimited. Calendar allowances use GiB.
 
 Use a dedicated 115 backup directory. Existing movie directories are not valid
 repository roots.
@@ -100,6 +100,22 @@ The counter wraps the actual 115 OSS upload reader:
 - a multipart retry records the retransmitted bytes again;
 - local hashing and temporary-file caching do not consume the quota;
 - usage is stored per repository and local calendar day.
+
+Customized Backrest instances derive a REST username containing the plan ID,
+daily byte allocation, and positive upload weight. The original REST password
+still authenticates the request; upstream Restic and the repository format are
+unchanged. OpenList stores task counters beside the repository counter.
+
+All uploads for one 115 account still share the driver's configured concurrency
+ceiling. When multiple tasks have queued pack uploads, newly free slots are
+assigned with smooth weighted round-robin. A lone active task can use every
+slot. Weights therefore control contention rather than impose a per-task speed
+cap.
+
+A task that completes can release its unused daily allocation through
+`POST /restic/_tasks/release`. Other tasks in the same repository may borrow
+that remainder, while global and repository daily/monthly limits remain final
+bounds.
 
 At a daily or monthly limit, new provider reads return HTTP `429`. Backrest can
 run the plan again after the next daily period. Objects that already completed

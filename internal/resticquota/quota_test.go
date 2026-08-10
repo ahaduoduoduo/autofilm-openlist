@@ -23,3 +23,29 @@ func TestMinRemaining(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskAllocationSharesOnlyReleasedRemainder(t *testing.T) {
+	m := newManager()
+	m.day = "2026-08-11"
+	m.month = "2026-08"
+
+	nas := taskKey{repository: "115-offsite", task: "nas-config"}
+	timeMachine := taskKey{repository: "115-offsite", task: "time-machine"}
+	m.rememberTaskLocked(nas, TaskPolicy{ID: nas.task, DailyLimitBytes: 5, Weight: 2})
+	m.rememberTaskLocked(timeMachine, TaskPolicy{ID: timeMachine.task, DailyLimitBytes: 45, Weight: 1})
+	m.taskBytes[nas] = 2
+	m.taskBytes[timeMachine] = 45
+
+	if got := m.taskAvailableLocked(timeMachine); got != 0 {
+		t.Fatalf("time-machine available before release = %d, want 0", got)
+	}
+	m.taskReleased[nas] = true
+	m.taskReleasedAt[nas] = 2
+	if got := m.taskAvailableLocked(timeMachine); got != 3 {
+		t.Fatalf("time-machine available after release = %d, want 3", got)
+	}
+	m.taskBytes[timeMachine] = 47
+	if got := m.taskAvailableLocked(timeMachine); got != 1 {
+		t.Fatalf("time-machine available after borrowing = %d, want 1", got)
+	}
+}

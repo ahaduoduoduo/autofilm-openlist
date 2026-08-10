@@ -26,6 +26,7 @@ jobs:
         run: go test ./drivers/115 ./internal/resticquota ./server/restic
 
   build:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         target:

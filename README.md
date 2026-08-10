@@ -126,6 +126,10 @@ standard Restic layout and can be opened by any Restic client.
 the request body. A rapid-upload match records zero WAN bytes. Retried
 multipart data is counted again because it was transmitted again. Current
 usage is available to administrators at `/api/admin/restic/usage`.
+Backrest can attach a plan ID, daily allocation, and upload weight to the same
+authenticated REST request. Task counters remain inside the global calendar
+limits, and the 115 account's fixed upload concurrency is distributed between
+active tasks with smooth weighted round-robin.
 The same response exposes a persistent repository-object inventory, allowing
 the backup console to show current remote Restic occupancy without repeatedly
 enumerating 115. Existing repositories are initialized from a trusted local
