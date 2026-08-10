@@ -134,6 +134,9 @@ Restic index manifest; the gateway does not scan remote data shards.
 The 115 upload-initialization response is decoded before either normal or
 multipart transfer begins. Malformed encrypted responses are retried up to
 three times with a fresh ECDH session; provider business errors are not retried.
+Restic objects up to 64 MiB use ordinary OSS upload to avoid splitting typical
+16--20 MiB packs into sequential 100 KiB multipart requests. Other OpenList
+uploads keep the 115 driver's original 10 MiB threshold.
 
 Configuration and recovery examples are in
 [docs/restic-115-backup.md](docs/restic-115-backup.md).

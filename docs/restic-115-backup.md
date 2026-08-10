@@ -6,7 +6,7 @@ The production Synology image is published by manually running
 `autofilm-openlist-restic:gateway` and an immutable commit SHA tag. Regular
 main-branch and pull-request builds keep the upstream multi-platform test matrix.
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 
 ## Architecture
 
@@ -14,6 +14,12 @@ Restic uses its native REST backend and sends encrypted repository objects to
 OpenList. OpenList maps each named repository to a directory on an existing
 storage mount. For a 115 mount, provider uploads continue through the existing
 115 driver and account scheduler.
+
+Restic objects up to 64 MiB use a single ordinary OSS `PutObject`. This covers
+the usual 16--20 MiB encrypted data packs without converting each pack into
+hundreds of sequential 100 KiB multipart requests. Larger Restic objects still
+use multipart upload. Uploads outside the Restic endpoint keep the original
+115 driver threshold: ordinary upload through 10 MiB and multipart above it.
 
 The integration does not use WebDAV, rclone, or an S3 compatibility endpoint.
 Restic remains an unmodified upstream binary. The customized Backrest service
