@@ -4,6 +4,9 @@ Updated: 2026-08-12
 
 ## Completed
 
+- [x] 2026-08-12: Reserve each Restic data pack's complete size before any 115
+  directory, rapid-upload, or OSS request; reject packs that cannot fit the
+  remaining global, repository, or task allowance without contacting 115.
 - [x] 2026-08-12: Allow QuarkOpen mounts created with an OpenList-issued
   refresh token to recover and persist AppID, SignKey, access token, and
   rotated refresh token; expose only validated SHA-1 file metadata so copies

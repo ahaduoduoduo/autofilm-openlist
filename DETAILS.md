@@ -31,9 +31,11 @@ in small modules.
   and two-character sharding for data packs.
 - `server/restic.go`: `/restic/{repository}/` registration on the main OpenList
   HTTP service.
-- `internal/resticquota/quota.go`: provider-upload byte accounting, shared and
+- `internal/resticquota/quota.go`: complete-pack quota reservations performed
+  before provider access, provider-upload byte accounting, shared and
   per-repository rates, task allocations, released-allocation sharing,
-  daily/monthly calendar limits, and usage snapshots.
+  daily/monthly calendar limits, and usage snapshots. Restic metadata uses the
+  same request context and upload scheduler without consuming data-pack quota.
 - `internal/model/restic_traffic_usage.go` and
   `internal/db/restic_traffic_usage.go`: one durable actual-upload counter per
   repository and day.

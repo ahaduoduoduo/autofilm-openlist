@@ -465,14 +465,23 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		c.String(http.StatusLengthRequired, "content length required")
 		return
 	}
+	tracker, err := uploadTracker(repository.Name, objectType, c.Request.ContentLength, task)
+	if errors.Is(err, resticquota.ErrQuotaExceeded) {
+		c.Header("Retry-After", secondsUntilTomorrow())
+		c.String(http.StatusTooManyRequests, resticquota.ErrQuotaExceeded.Error())
+		return
+	}
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer tracker.Close()
 	directory := path.Dir(objectPath)
 	if err := ensureDirectory(c, directory); err != nil {
 		writeStorageError(c, err)
 		return
 	}
-	tracker := resticquota.NewTracker(repository.Name, task)
 	ctx := resticquota.WithTracker(withMeta(c, objectPath), tracker)
-	defer tracker.Close()
 	object := &model.Object{
 		Name:     name,
 		Size:     c.Request.ContentLength,
@@ -514,6 +523,13 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		}).Error("failed to update Restic repository inventory after upload")
 	}
 	c.Status(http.StatusOK)
+}
+
+func uploadTracker(repository, objectType string, size int64, task resticquota.TaskPolicy) (*resticquota.Tracker, error) {
+	if objectType == "data" {
+		return resticquota.NewReservedTracker(repository, size, task)
+	}
+	return resticquota.NewUnmeteredTracker(repository, task), nil
 }
 
 func objectPath(root, objectType, name string) string {

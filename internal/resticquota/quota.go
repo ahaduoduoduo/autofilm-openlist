@@ -25,11 +25,19 @@ var ErrQuotaExceeded = errors.New("restic upload quota reached")
 type contextKey struct{}
 
 type Tracker struct {
-	manager    *manager
-	repository string
-	task       TaskPolicy
-	errMu      sync.Mutex
-	err        error
+	manager          *manager
+	repository       string
+	task             TaskPolicy
+	metered          bool
+	fixedReservation bool
+	reservedBytes    int64
+	reservationMu    sync.Mutex
+	consumedBytes    int64
+	inFlightBytes    int64
+	closeOnce        sync.Once
+	closeErr         error
+	errMu            sync.Mutex
+	err              error
 }
 
 type TaskPolicy struct {
@@ -120,6 +128,33 @@ func newManager() *manager {
 }
 
 func NewTracker(repository string, policies ...TaskPolicy) *Tracker {
+	return newTracker(repository, true, policies...)
+}
+
+// NewReservedTracker reserves the complete object before the provider is
+// contacted. A rejected reservation therefore cannot create 115 upload or
+// rapid-upload requests that Restic will retry after the quota is exhausted.
+func NewReservedTracker(repository string, size int64, policies ...TaskPolicy) (*Tracker, error) {
+	if size < 0 {
+		return nil, errors.New("invalid Restic upload size")
+	}
+	tracker := newTracker(repository, true, policies...)
+	if err := tracker.manager.reserveExact(repository, tracker.task, size); err != nil {
+		tracker.setErr(err)
+		return nil, err
+	}
+	tracker.fixedReservation = true
+	tracker.reservedBytes = size
+	return tracker, nil
+}
+
+// NewUnmeteredTracker keeps Restic-specific upload behavior and scheduling but
+// does not charge repository metadata against the data-pack traffic budget.
+func NewUnmeteredTracker(repository string, policies ...TaskPolicy) *Tracker {
+	return newTracker(repository, false, policies...)
+}
+
+func newTracker(repository string, metered bool, policies ...TaskPolicy) *Tracker {
 	policy := TaskPolicy{}
 	if len(policies) > 0 {
 		policy = policies[0]
@@ -127,7 +162,7 @@ func NewTracker(repository string, policies ...TaskPolicy) *Tracker {
 	if policy.Weight <= 0 {
 		policy.Weight = 1
 	}
-	return &Tracker{manager: singleton, repository: repository, task: policy}
+	return &Tracker{manager: singleton, repository: repository, task: policy, metered: metered}
 }
 
 func (t *Tracker) TaskID() string { return t.task.ID }
@@ -169,9 +204,17 @@ func (t *Tracker) setErr(err error) {
 }
 
 func (t *Tracker) Close() error {
-	err := t.manager.flush()
-	t.setErr(err)
-	return err
+	t.closeOnce.Do(func() {
+		if t.fixedReservation {
+			t.reservationMu.Lock()
+			consumed := t.consumedBytes
+			t.reservationMu.Unlock()
+			t.manager.finishReservation(t.repository, t.task, t.reservedBytes, consumed)
+		}
+		t.closeErr = t.manager.flush()
+		t.setErr(t.closeErr)
+	})
+	return t.closeErr
 }
 
 type trackedReader struct {
@@ -183,6 +226,12 @@ type trackedReader struct {
 func (r *trackedReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
+	}
+	if !r.tracker.metered {
+		return r.readUnmetered(p)
+	}
+	if r.tracker.fixedReservation {
+		return r.readReserved(p)
 	}
 	allowed, err := r.tracker.manager.reserve(r.tracker.repository, r.tracker.task, len(p))
 	if err != nil {
@@ -212,13 +261,99 @@ func (r *trackedReader) Read(p []byte) (int, error) {
 	return n, readErr
 }
 
+func (r *trackedReader) readUnmetered(p []byte) (int, error) {
+	if err := r.tracker.manager.wait(r.ctx, r.tracker.repository, len(p)); err != nil {
+		r.tracker.setErr(err)
+		return 0, err
+	}
+	return r.reader.Read(p)
+}
+
+func (r *trackedReader) readReserved(p []byte) (int, error) {
+	allowed := r.tracker.claimReservation(len(p))
+	if allowed > 0 {
+		if err := r.tracker.manager.wait(r.ctx, r.tracker.repository, allowed); err != nil {
+			r.tracker.finishReservationClaim(allowed, 0)
+			r.tracker.setErr(err)
+			return 0, err
+		}
+		n, readErr := r.reader.Read(p[:allowed])
+		r.tracker.finishReservationClaim(allowed, n)
+		return n, readErr
+	}
+
+	// A provider retry may read the same object again after the initial
+	// Content-Length reservation has been consumed. Read locally first so an
+	// EOF probe needs no quota, then reserve the exact retransmitted bytes before
+	// they can be returned to the OSS client.
+	n, readErr := r.reader.Read(p)
+	if n == 0 {
+		return 0, readErr
+	}
+	if err := r.tracker.manager.reserveExact(r.tracker.repository, r.tracker.task, int64(n)); err != nil {
+		r.tracker.setErr(err)
+		return 0, err
+	}
+	if err := r.tracker.manager.wait(r.ctx, r.tracker.repository, n); err != nil {
+		r.tracker.manager.finishReservation(r.tracker.repository, r.tracker.task, int64(n), 0)
+		r.tracker.setErr(err)
+		return 0, err
+	}
+	r.tracker.manager.finishReservation(r.tracker.repository, r.tracker.task, int64(n), int64(n))
+	return n, readErr
+}
+
+func (t *Tracker) claimReservation(requested int) int {
+	t.reservationMu.Lock()
+	defer t.reservationMu.Unlock()
+	remaining := t.reservedBytes - t.consumedBytes - t.inFlightBytes
+	if remaining <= 0 {
+		return 0
+	}
+	allowed := int(min(int64(requested), remaining))
+	t.inFlightBytes += int64(allowed)
+	return allowed
+}
+
+func (t *Tracker) finishReservationClaim(claimed, consumed int) {
+	t.reservationMu.Lock()
+	t.inFlightBytes -= int64(claimed)
+	t.consumedBytes += int64(consumed)
+	t.reservationMu.Unlock()
+}
+
 func (m *manager) reserve(repository string, task TaskPolicy, requested int) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.ensurePeriodLocked(); err != nil {
 		return 0, err
 	}
-	allowed := int64(requested)
+	allowed := m.availableLocked(repository, task, int64(requested))
+	if allowed <= 0 {
+		return 0, ErrQuotaExceeded
+	}
+	m.addReservationLocked(repository, task, allowed)
+	return int(allowed), nil
+}
+
+func (m *manager) reserveExact(repository string, task TaskPolicy, requested int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.ensurePeriodLocked(); err != nil {
+		return err
+	}
+	if requested == 0 {
+		return nil
+	}
+	if allowed := m.availableLocked(repository, task, requested); allowed < requested {
+		return ErrQuotaExceeded
+	}
+	m.addReservationLocked(repository, task, requested)
+	return nil
+}
+
+func (m *manager) availableLocked(repository string, task TaskPolicy, requested int64) int64 {
+	allowed := requested
 	repo := repositoryConfig(repository)
 	allowed = minRemaining(allowed, bytesFromGiB(conf.Conf.Restic.DailyUploadGiB), total(m.dayBytes)+total(m.reserved))
 	allowed = minRemaining(allowed, bytesFromGiB(conf.Conf.Restic.MonthlyUploadGiB), total(m.monthBytes)+total(m.reserved))
@@ -229,14 +364,14 @@ func (m *manager) reserve(repository string, task TaskPolicy, requested int) (in
 		m.rememberTaskLocked(key, task)
 		allowed = min(allowed, m.taskAvailableLocked(key))
 	}
-	if allowed <= 0 {
-		return 0, ErrQuotaExceeded
-	}
-	m.reserved[repository] += allowed
+	return allowed
+}
+
+func (m *manager) addReservationLocked(repository string, task TaskPolicy, bytes int64) {
+	m.reserved[repository] += bytes
 	if task.ID != "" {
-		m.taskReserved[taskKey{repository: repository, task: task.ID}] += allowed
+		m.taskReserved[taskKey{repository: repository, task: task.ID}] += bytes
 	}
-	return int(allowed), nil
 }
 
 func (m *manager) rememberTaskLocked(key taskKey, policy TaskPolicy) {
