@@ -6,7 +6,7 @@ The production Synology image is published by manually running
 `autofilm-openlist-restic:gateway` and an immutable commit SHA tag. Regular
 main-branch and pull-request builds keep the upstream multi-platform test matrix.
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Architecture
 
@@ -93,7 +93,14 @@ accumulate every pack.
 
 ## Traffic accounting
 
-The counter wraps the actual 115 OSS upload reader:
+Before OpenList performs a directory lookup, rapid-upload check, or OSS
+initialization, it atomically reserves the complete Content-Length of each
+Restic data pack. If the remaining allowance cannot contain the whole pack,
+the REST endpoint returns HTTP 429 locally and does not contact 115. Repository
+metadata such as locks, indexes, and snapshots remains outside this data-pack
+allowance so a completed upload can publish its snapshot and remove its lock.
+
+The counter then follows the actual 115 OSS upload reader:
 
 - a rapid-upload match uses no WAN quota;
 - a normal upload records each byte read by the OSS client;
@@ -117,8 +124,9 @@ A task that completes can release its unused daily allocation through
 that remainder, while global and repository daily/monthly limits remain final
 bounds.
 
-At a daily or monthly limit, new provider reads return HTTP `429`. Backrest can
-run the plan again after the next daily period. Objects that already completed
+At a daily or monthly limit, a data pack that cannot fit returns HTTP `429`
+before a provider request. Backrest can run the plan again after the next daily
+period. Objects that already completed
 remain valid Restic objects; a later backup reuses indexed data and uploads only
 missing content. Interrupted work may leave unreferenced packs, which a later
 `prune` removes.

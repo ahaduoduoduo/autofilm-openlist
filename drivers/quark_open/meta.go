@@ -13,8 +13,8 @@ type Addition struct {
 	APIAddress     string `json:"api_url_address" default:"https://api.oplist.org/quarkyun/renewapi"`
 	AccessToken    string `json:"access_token" required:"false" default:""`
 	RefreshToken   string `json:"refresh_token" required:"true"`
-	AppID          string `json:"app_id" required:"true" help:"Keep it empty if you don't have one"`
-	SignKey        string `json:"sign_key" required:"true" help:"Keep it empty if you don't have one"`
+	AppID          string `json:"app_id" required:"false" help:"Optional; obtained from the refresh token when empty"`
+	SignKey        string `json:"sign_key" required:"false" help:"Optional; obtained from the refresh token when empty"`
 }
 
 type Conf struct {

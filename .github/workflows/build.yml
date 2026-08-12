@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   restic-unit-test:
-    name: Restic unit tests
+    name: Customized unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,8 +22,8 @@ jobs:
         with:
           go-version: "1.26.4"
 
-      - name: Test Restic gateway
-        run: go test ./drivers/115 ./internal/resticquota ./server/restic
+      - name: Test customized components
+        run: go test ./drivers/115 ./drivers/quark_open ./internal/resticquota ./server/restic
 
   build:
     if: github.event_name == 'workflow_dispatch'

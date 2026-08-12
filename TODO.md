@@ -1,9 +1,16 @@
 # Custom OpenList development status
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Completed
 
+- [x] 2026-08-12: Reserve each Restic data pack's complete size before any 115
+  directory, rapid-upload, or OSS request; reject packs that cannot fit the
+  remaining global, repository, or task allowance without contacting 115.
+- [x] 2026-08-12: Allow QuarkOpen mounts created with an OpenList-issued
+  refresh token to recover and persist AppID, SignKey, access token, and
+  rotated refresh token; expose only validated SHA-1 file metadata so copies
+  to 115 can attempt rapid upload without an unnecessary full source read.
 - [x] 2026-08-11: Add persistent task-level upload allocations and weighted
   sharing of the existing 115 upload-concurrency pool; completed tasks release
   unused allocation without changing the global calendar quota.

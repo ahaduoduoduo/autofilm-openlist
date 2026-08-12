@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
@@ -25,6 +26,7 @@ type QuarkOpen struct {
 	Addition
 	config driver.Config
 	conf   Conf
+	authMu sync.Mutex
 }
 
 func (d *QuarkOpen) Config() driver.Config {
@@ -36,6 +38,12 @@ func (d *QuarkOpen) GetAddition() driver.Additional {
 }
 
 func (d *QuarkOpen) Init(ctx context.Context) error {
+	if d.needsInitialRefresh() {
+		if err := d.refreshToken(ctx); err != nil {
+			return err
+		}
+	}
+
 	var resp UserInfoResp
 
 	_, err := d.request(ctx, "/open/v1/user/info", http.MethodGet, nil, &resp)

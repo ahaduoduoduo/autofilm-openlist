@@ -122,10 +122,13 @@ repositories. Restic talks directly to `/restic/{repository}/`; no WebDAV,
 rclone, or S3 compatibility layer is involved. Repository objects retain the
 standard Restic layout and can be opened by any Restic client.
 
-115 upload rate and calendar quotas are enforced where the 115 OSS client reads
-the request body. A rapid-upload match records zero WAN bytes. Retried
-multipart data is counted again because it was transmitted again. Current
-usage is available to administrators at `/api/admin/restic/usage`.
+Before any 115 request is created, each Restic data pack reserves its complete
+Content-Length from the applicable global, repository, and task quotas. A pack
+that no longer fits is rejected locally with HTTP 429; Restic metadata remains
+outside the data-pack byte budget. A rapid-upload match releases the reservation
+and records zero WAN bytes. Retried multipart data is counted again because it
+was transmitted again. Current usage is available to administrators at
+`/api/admin/restic/usage`.
 Backrest can attach a plan ID, daily allocation, and upload weight to the same
 authenticated REST request. Task counters remain inside the global calendar
 limits, and the 115 account's fixed upload concurrency is distributed between
@@ -144,6 +147,21 @@ uploads keep the 115 driver's original 10 MiB threshold.
 
 Configuration and recovery examples are in
 [docs/restic-115-backup.md](docs/restic-115-backup.md).
+
+## QuarkOpen to 115 rapid upload
+
+QuarkOpen accepts the refresh token returned by the OpenList token page when
+the server-provided application parameters are selected. If AppID, SignKey, or
+the access token is absent, the driver obtains the complete OAuth credential
+set from the issuer and persists the rotated values before its first signed
+Quark API request.
+
+Validated QuarkOpen SHA-1 metadata is attached to listed file objects. A copy
+to 115 can therefore use the 115 rapid-upload check without reading the entire
+source file when 115 already has matching content. Missing, malformed, or
+non-SHA-1 metadata is ignored and retains the normal streamed-copy fallback.
+Configuration and behavior details are in
+[docs/quark-open-115-rapid-transfer.md](docs/quark-open-115-rapid-transfer.md).
 
 ## AutoFilm integration
 
