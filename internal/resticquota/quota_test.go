@@ -7,7 +7,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 )
+
+func useTestConfig(t *testing.T) {
+	previous := conf.Conf
+	conf.Conf = &conf.Config{}
+	t.Cleanup(func() {
+		conf.Conf = previous
+	})
+}
 
 func TestMinRemaining(t *testing.T) {
 	tests := []struct {
@@ -58,6 +68,7 @@ func TestTaskAllocationSharesOnlyReleasedRemainder(t *testing.T) {
 }
 
 func TestReserveExactRejectsWholeObject(t *testing.T) {
+	useTestConfig(t)
 	m := newManager()
 	now := time.Now().In(configuredLocation())
 	m.day = now.Format("2006-01-02")
@@ -80,6 +91,7 @@ func TestReserveExactRejectsWholeObject(t *testing.T) {
 }
 
 func TestReservedReaderUsesExistingReservation(t *testing.T) {
+	useTestConfig(t)
 	m := newManager()
 	tracker := &Tracker{
 		manager:          m,
@@ -101,6 +113,7 @@ func TestReservedReaderUsesExistingReservation(t *testing.T) {
 }
 
 func TestUnmeteredReaderDoesNotReserveQuota(t *testing.T) {
+	useTestConfig(t)
 	m := newManager()
 	tracker := &Tracker{manager: m, metered: false}
 	ctx := WithTracker(context.Background(), tracker)
@@ -117,6 +130,7 @@ func TestUnmeteredReaderDoesNotReserveQuota(t *testing.T) {
 }
 
 func TestReservedReaderAccountsForProviderRetry(t *testing.T) {
+	useTestConfig(t)
 	m := newManager()
 	now := time.Now().In(configuredLocation())
 	m.day = now.Format("2006-01-02")
