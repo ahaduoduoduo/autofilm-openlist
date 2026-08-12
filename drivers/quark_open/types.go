@@ -36,16 +36,17 @@ type RefreshTokenOnlineAPIResp struct {
 }
 
 type File struct {
-	Fid          string `json:"fid"`
-	ParentFid    string `json:"parent_fid"`
-	Category     int64  `json:"category"`
-	FileName     string `json:"filename"`
-	Size         int64  `json:"size"`
-	FileType     string `json:"file_type"`
-	ThumbnailURL string `json:"thumbnail_url"`
-	ContentHash  string `json:"content_hash"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    int64  `json:"updated_at"`
+	Fid             string `json:"fid"`
+	ParentFid       string `json:"parent_fid"`
+	Category        int64  `json:"category"`
+	FileName        string `json:"filename"`
+	Size            int64  `json:"size"`
+	FileType        string `json:"file_type"`
+	ThumbnailURL    string `json:"thumbnail_url"`
+	ContentHash     string `json:"content_hash"`
+	ContentHashName string `json:"content_hash_name"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 }
 
 func fileToObj(f File) *model.ObjThumb {
@@ -57,6 +58,7 @@ func fileToObj(f File) *model.ObjThumb {
 			Modified: time.UnixMilli(f.UpdatedAt),
 			IsFolder: f.FileType == "0",
 			Ctime:    time.UnixMilli(f.CreatedAt),
+			HashInfo: contentHashInfo(f.ContentHashName, f.ContentHash),
 		},
 		Thumbnail: model.Thumbnail{Thumbnail: f.ThumbnailURL},
 	}

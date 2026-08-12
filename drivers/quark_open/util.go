@@ -19,9 +19,7 @@ import (
 
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
-	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/go-resty/resty/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 func (d *QuarkOpen) request(ctx context.Context, pathname string, method string, callback base.ReqCallback, resp interface{}, manualSign ...*ManualSign) ([]byte, error) {
@@ -67,7 +65,7 @@ func (d *QuarkOpen) request(ctx context.Context, pathname string, method string,
 	// 判断 是否需要 刷新 access_token
 	if e.Status == -1 && (e.Errno == 11001 || (e.Errno == 14001 && strings.Contains(e.ErrorInfo, "access_token"))) {
 		// token 过期
-		err = d.refreshToken()
+		err = d.refreshToken(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -414,57 +412,4 @@ func (d *QuarkOpen) generateReqSign(method string, pathname string, signKey stri
 	reqID := reqUuid.String()
 
 	return timestamp, xPanToken, reqID
-}
-
-func (d *QuarkOpen) refreshToken() error {
-	refresh, access, err := d._refreshToken()
-	for i := 0; i < 3; i++ {
-		if err == nil {
-			break
-		} else {
-			log.Errorf("[quark_open] failed to refresh token: %s", err)
-		}
-		refresh, access, err = d._refreshToken()
-	}
-	if err != nil {
-		return err
-	}
-	log.Infof("[quark_open] token exchange: %s -> %s", d.RefreshToken, refresh)
-	d.RefreshToken, d.AccessToken = refresh, access
-	op.MustSaveDriverStorage(d)
-	return nil
-}
-
-func (d *QuarkOpen) _refreshToken() (string, string, error) {
-	if d.UseOnlineAPI && d.APIAddress != "" {
-		u := d.APIAddress
-		var resp RefreshTokenOnlineAPIResp
-		_, err := base.RestyClient.R().
-			SetResult(&resp).
-			SetQueryParams(map[string]string{
-				"refresh_ui": d.RefreshToken,
-				"server_use": "true",
-				"driver_txt": "quarkyun_oa",
-			}).
-			Get(u)
-		if err != nil {
-			return "", "", err
-		}
-		if resp.RefreshToken == "" || resp.AccessToken == "" {
-			if resp.ErrorMessage != "" {
-				return "", "", fmt.Errorf("failed to refresh token: %s", resp.ErrorMessage)
-			}
-			return "", "", fmt.Errorf("empty token returned from official API, a wrong refresh token may have been used")
-		}
-		return resp.RefreshToken, resp.AccessToken, nil
-	}
-
-	// TODO 本地刷新逻辑
-	return "", "", fmt.Errorf("local refresh token logic is not implemented yet, please use online API or contact the developer")
-}
-
-// 生成认证 Cookie
-func (d *QuarkOpen) generateAuthCookie() string {
-	return fmt.Sprintf("x_pan_client_id=%s; x_pan_access_token=%s",
-		d.Addition.AppID, d.Addition.AccessToken)
 }

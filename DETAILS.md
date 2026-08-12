@@ -1,9 +1,28 @@
 # Custom OpenList module map
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 The upstream OpenList structure is unchanged. Custom responsibilities are kept
 in small modules.
+
+## QuarkOpen authenticated rapid transfer
+
+- `drivers/quark_open/auth.go`: initializes a refresh-token-only mount from
+  the Quark OAuth issuer, persists the complete rotated credential set, keeps
+  the configured online refresh service for mounts that already have signing
+  credentials, serializes refreshes, and avoids logging token values.
+- `drivers/quark_open/hash.go`: accepts Quark file metadata as SHA-1 only when
+  its declared algorithm is compatible and its value is exactly 40 valid
+  hexadecimal characters.
+- `drivers/quark_open/types.go`: maps validated SHA-1 metadata into the common
+  OpenList object contract used by cross-storage copies and 115 rapid upload.
+- `drivers/quark_open/auth_test.go` and `drivers/quark_open/hash_test.go`:
+  cover the direct refresh request/response contract, required signing
+  credentials, hash validation, normalization, and object mapping.
+- `.github/workflows/build.yml` and `.github/workflows/test_docker.yml`: run the
+  QuarkOpen tests with the fork's customized component test set.
+- `docs/quark-open-115-rapid-transfer.md`: configuration, credential rotation,
+  rapid-upload conditions, fallback behavior, and operational boundaries.
 
 ## Restic backup gateway
 

@@ -172,7 +172,7 @@ jobs:
           go-version: '1.26.4'
 
       - name: Test customized components
-        run: go test ./drivers/115 ./internal/resticquota ./server/restic
+        run: go test ./drivers/115 ./drivers/quark_open ./internal/resticquota ./server/restic
 
       - name: Checkout AutoFilm OpenList frontend
         uses: actions/checkout@v7
