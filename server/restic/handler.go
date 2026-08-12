@@ -467,8 +467,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 	}
 	tracker, err := uploadTracker(repository.Name, objectType, c.Request.ContentLength, task)
 	if errors.Is(err, resticquota.ErrQuotaExceeded) {
-		c.Header("Retry-After", secondsUntilTomorrow())
-		c.String(http.StatusTooManyRequests, resticquota.ErrQuotaExceeded.Error())
+		writeQuotaExceeded(c)
 		return
 	}
 	if err != nil {
@@ -496,8 +495,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 	}
 	if err := fs.PutDirectly(ctx, directory, fileStream); err != nil {
 		if errors.Is(tracker.Err(), resticquota.ErrQuotaExceeded) {
-			c.Header("Retry-After", secondsUntilTomorrow())
-			c.String(http.StatusTooManyRequests, resticquota.ErrQuotaExceeded.Error())
+			writeQuotaExceeded(c)
 			return
 		}
 		writeStorageError(c, err)
@@ -523,6 +521,14 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		}).Error("failed to update Restic repository inventory after upload")
 	}
 	c.Status(http.StatusOK)
+}
+
+func writeQuotaExceeded(c *gin.Context) {
+	c.Header("Retry-After", secondsUntilTomorrow())
+	// Restic classifies 507 as permanent for the current command. Returning 429
+	// makes it retry an intentionally exhausted quota for hours. Backrest uses
+	// the response marker to convert this into the successful waiting state.
+	c.String(http.StatusInsufficientStorage, resticquota.ErrQuotaExceeded.Error())
 }
 
 func uploadTracker(repository, objectType string, size int64, task resticquota.TaskPolicy) (*resticquota.Tracker, error) {

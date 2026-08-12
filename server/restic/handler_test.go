@@ -2,7 +2,12 @@ package restic
 
 import (
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestObjectPath(t *testing.T) {
@@ -100,5 +105,23 @@ func TestParseRange(t *testing.T) {
 		if got.start != tt.wantStart || got.length != tt.wantLength {
 			t.Fatalf("parseRange(%q) = %+v", tt.value, got)
 		}
+	}
+}
+
+func TestWriteQuotaExceededUsesPermanentResticStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	writeQuotaExceeded(ctx)
+
+	if recorder.Code != http.StatusInsufficientStorage {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusInsufficientStorage)
+	}
+	if recorder.Header().Get("Retry-After") == "" {
+		t.Fatal("Retry-After header is empty")
+	}
+	if !strings.Contains(recorder.Body.String(), "restic upload quota reached") {
+		t.Fatalf("body = %q, want quota marker", recorder.Body.String())
 	}
 }

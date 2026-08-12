@@ -96,7 +96,7 @@ accumulate every pack.
 Before OpenList performs a directory lookup, rapid-upload check, or OSS
 initialization, it atomically reserves the complete Content-Length of each
 Restic data pack. If the remaining allowance cannot contain the whole pack,
-the REST endpoint returns HTTP 429 locally and does not contact 115. Repository
+the REST endpoint returns HTTP `507 Insufficient Storage` locally and does not contact 115. Restic treats 507 as permanent for the current command, allowing Backrest to record the plan as waiting for the next upload window instead of retrying the same rejected pack for hours. Repository
 metadata such as locks, indexes, and snapshots remains outside this data-pack
 allowance so a completed upload can publish its snapshot and remove its lock.
 
@@ -124,7 +124,7 @@ A task that completes can release its unused daily allocation through
 that remainder, while global and repository daily/monthly limits remain final
 bounds.
 
-At a daily or monthly limit, a data pack that cannot fit returns HTTP `429`
+At a daily or monthly limit, a data pack that cannot fit returns HTTP `507`
 before a provider request. Backrest can run the plan again after the next daily
 period. Objects that already completed
 remain valid Restic objects; a later backup reuses indexed data and uploads only
