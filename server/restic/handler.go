@@ -508,7 +508,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		return
 	}
 	repositoryInventoryMu.Lock()
-	err := db.UpsertResticRepositoryObject(
+	err = db.UpsertResticRepositoryObject(
 		repository.Name,
 		objectType,
 		name,
