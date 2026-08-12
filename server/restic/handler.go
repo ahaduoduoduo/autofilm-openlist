@@ -632,8 +632,10 @@ func writeStorageError(c *gin.Context, err error) {
 
 func secondsUntilTomorrow() string {
 	location := time.Local
-	if configured, err := time.LoadLocation(conf.Conf.Restic.Timezone); err == nil {
-		location = configured
+	if conf.Conf != nil {
+		if configured, err := time.LoadLocation(conf.Conf.Restic.Timezone); err == nil {
+			location = configured
+		}
 	}
 	now := time.Now().In(location)
 	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location)
