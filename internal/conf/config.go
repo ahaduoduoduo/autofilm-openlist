@@ -97,14 +97,15 @@ type ResticRepository struct {
 }
 
 type Restic struct {
-	Enable             bool               `json:"enable" env:"ENABLE"`
-	Username           string             `json:"username" env:"USERNAME"`
-	Password           string             `json:"password" env:"PASSWORD"`
-	Timezone           string             `json:"timezone" env:"TIMEZONE"`
-	UploadMiBPerSecond float64            `json:"upload_mib_per_second" env:"UPLOAD_MIB_PER_SECOND"`
-	DailyUploadGiB     float64            `json:"daily_upload_gib" env:"DAILY_UPLOAD_GIB"`
-	MonthlyUploadGiB   float64            `json:"monthly_upload_gib" env:"MONTHLY_UPLOAD_GIB"`
-	Repositories       []ResticRepository `json:"repositories"`
+	Enable                  bool               `json:"enable" env:"ENABLE"`
+	Username                string             `json:"username" env:"USERNAME"`
+	Password                string             `json:"password" env:"PASSWORD"`
+	Timezone                string             `json:"timezone" env:"TIMEZONE"`
+	UploadMiBPerSecond      float64            `json:"upload_mib_per_second" env:"UPLOAD_MIB_PER_SECOND"`
+	DailyUploadGiB          float64            `json:"daily_upload_gib" env:"DAILY_UPLOAD_GIB"`
+	MonthlyUploadGiB        float64            `json:"monthly_upload_gib" env:"MONTHLY_UPLOAD_GIB"`
+	DownloadCooldownMinutes int                `json:"download_cooldown_minutes" env:"DOWNLOAD_COOLDOWN_MINUTES"`
+	Repositories            []ResticRepository `json:"repositories"`
 }
 
 type FTP struct {
@@ -254,8 +255,9 @@ func DefaultConfig(dataDir string) *Config {
 			SSL:    false,
 		},
 		Restic: Restic{
-			Enable:   false,
-			Timezone: "Asia/Shanghai",
+			Enable:                  false,
+			Timezone:                "Asia/Shanghai",
+			DownloadCooldownMinutes: 30,
 		},
 		FTP: FTP{
 			Enable:                  false,

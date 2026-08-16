@@ -138,6 +138,12 @@ the backup console to show current remote Restic occupancy without repeatedly
 enumerating 115. Existing repositories are initialized from a trusted local
 Restic index manifest; the gateway does not scan remote data shards.
 
+Restic downloads have a repository-scoped circuit breaker. When the 115
+download-link request returns Alibaba Cloud's temporary 405 block page, the
+gateway returns `503 Retry-After` without contacting 115 again for the
+configured cooldown. After the cooldown, one request probes recovery before
+normal Restic reads resume. Media playback routes are not affected.
+
 The 115 upload-initialization response is decoded before either normal or
 multipart transfer begins. Malformed encrypted responses are retried up to
 three times with a fresh ECDH session; provider business errors are not retried.

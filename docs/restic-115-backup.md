@@ -131,6 +131,16 @@ remain valid Restic objects; a later backup reuses indexed data and uploads only
 missing content. Interrupted work may leave unreferenced packs, which a later
 `prune` removes.
 
+Restic object reads are isolated from ordinary OpenList downloads. If 115's
+download-link endpoint returns Alibaba Cloud's temporary 405 block page, the
+gateway pauses provider reads for that repository and returns HTTP 503 with a
+`Retry-After` value. The default cooldown is 30 minutes and can be changed with
+`restic.download_cooldown_minutes` or
+`RESTIC_DOWNLOAD_COOLDOWN_MINUTES`. At the end of the cooldown, only one
+request probes 115; successful recovery reopens the repository automatically.
+This prevents Restic's own retries from generating hundreds of additional 115
+requests while the provider is blocked.
+
 Administrator usage endpoint:
 
 ```text
