@@ -1,9 +1,20 @@
 # Custom OpenList module map
 
-Updated: 2026-08-12
+Updated: 2026-09-25
 
 The upstream OpenList structure is unchanged. Custom responsibilities are kept
 in small modules.
+
+## Fork CI scope
+
+- `.github/workflows/build.yml`: pull-request and manually triggered tests for
+  the customized OpenList components.
+- `.github/workflows/test_docker.yml`: upstream Docker jobs remain restricted
+  to the `OpenListTeam` organization; the fork-specific linux/amd64 deployment
+  image is published only by manual dispatch.
+- The upstream main-branch beta release matrix and GitHub-to-Gitee sync are not
+  part of this fork. Their workflows were removed because this repository does
+  not publish official OpenList beta binaries or maintain a Gitee mirror.
 
 ## QuarkOpen authenticated rapid transfer
 

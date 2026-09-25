@@ -1,9 +1,12 @@
 # Custom OpenList development status
 
-Updated: 2026-08-16
+Updated: 2026-09-25
 
 ## Completed
 
+- [x] 2026-09-25: Remove the inherited full-platform beta release and Gitee
+  synchronization workflows so pushes to the fork's `main` branch run neither
+  upstream release publication nor an unconfigured mirror operation.
 - [x] 2026-08-16: Pause only Restic repository reads after Alibaba Cloud's
   temporary 405 block page, return `503 Retry-After` during a configurable
   cooldown, and require a successful single probe before normal reads resume.
