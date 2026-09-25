@@ -9,9 +9,8 @@ in small modules.
 
 - `.github/workflows/build.yml`: pull-request and manually triggered tests for
   the customized OpenList components.
-- `.github/workflows/test_docker.yml`: upstream Docker jobs remain restricted
-  to the `OpenListTeam` organization; the fork-specific linux/amd64 deployment
-  image is published only by manual dispatch.
+- `.github/workflows/deploy_autofilm.yml`: manually tests the customized
+  components and publishes the fork-specific linux/amd64 deployment image.
 - The upstream main-branch beta release matrix and GitHub-to-Gitee sync are not
   part of this fork. Their workflows were removed because this repository does
   not publish official OpenList beta binaries or maintain a Gitee mirror.
@@ -30,8 +29,8 @@ in small modules.
 - `drivers/quark_open/auth_test.go` and `drivers/quark_open/hash_test.go`:
   cover the direct refresh request/response contract, required signing
   credentials, hash validation, normalization, and object mapping.
-- `.github/workflows/build.yml` and `.github/workflows/test_docker.yml`: run the
-  QuarkOpen tests with the fork's customized component test set.
+- `.github/workflows/build.yml` and `.github/workflows/deploy_autofilm.yml`: run
+  the QuarkOpen tests with the fork's customized component test set.
 - `docs/quark-open-115-rapid-transfer.md`: configuration, credential rotation,
   rapid-upload conditions, fallback behavior, and operational boundaries.
 

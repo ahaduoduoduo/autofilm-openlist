@@ -5,8 +5,9 @@ Updated: 2026-09-25
 ## Completed
 
 - [x] 2026-09-25: Remove the inherited full-platform beta release and Gitee
-  synchronization workflows so pushes to the fork's `main` branch run neither
-  upstream release publication nor an unconfigured mirror operation.
+  synchronization workflows, and replace the mixed upstream Docker workflow
+  with a manual-only AutoFilm deployment workflow so pushes to the fork's
+  `main` branch do not start unused release jobs.
 - [x] 2026-08-16: Pause only Restic repository reads after Alibaba Cloud's
   temporary 405 block page, return `503 Retry-After` during a configurable
   cooldown, and require a successful single probe before normal reads resume.

@@ -1,12 +1,12 @@
 # Restic to 115 through OpenList
 
 The production Synology image is published by manually running
-`.github/workflows/test_docker.yml`. The manual job builds only the
+`.github/workflows/deploy_autofilm.yml`. The manual job builds only the
 `linux/amd64` base image and publishes both
-`autofilm-openlist-restic:gateway` and an immutable commit SHA tag. Regular
-main-branch and pull-request builds keep the upstream multi-platform test matrix.
+`autofilm-openlist-restic:gateway` and an immutable commit SHA tag. The fork
+does not run the upstream multi-platform beta release matrix.
 
-Updated: 2026-08-12
+Updated: 2026-09-25
 
 ## Architecture
 
