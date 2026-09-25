@@ -31,6 +31,9 @@ in small modules.
   and two-character sharding for data packs.
 - `server/restic.go`: `/restic/{repository}/` registration on the main OpenList
   HTTP service.
+- `server/restic/download_circuit.go`: repository-scoped temporary 405
+  detection, cooldown, single recovery probe, and `Retry-After` responses for
+  Restic object reads. It does not affect normal OpenList downloads.
 - `internal/resticquota/quota.go`: complete-pack quota reservations performed
   before provider access, provider-upload byte accounting, shared and
   per-repository rates, task allocations, released-allocation sharing,
@@ -60,6 +63,8 @@ in small modules.
   upload thresholds without contacting 115.
 - `drivers/115/util_test.go`: upload-initialization retry, exhaustion,
   non-decode error, and cancellation coverage.
+- `server/restic/download_circuit_test.go`: validates temporary block,
+  cooldown, single-probe recovery, and unrelated-error behavior.
 - `server/handles/restic.go`: administrator-only usage response consumed by the
   customized backup console.
 - `docs/restic-115-backup.md`: deployment, repository, quota, occupancy

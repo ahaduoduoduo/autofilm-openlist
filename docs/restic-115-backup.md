@@ -96,7 +96,7 @@ accumulate every pack.
 Before OpenList performs a directory lookup, rapid-upload check, or OSS
 initialization, it atomically reserves the complete Content-Length of each
 Restic data pack. If the remaining allowance cannot contain the whole pack,
-the REST endpoint returns HTTP 429 locally and does not contact 115. Repository
+the REST endpoint returns HTTP `507 Insufficient Storage` locally and does not contact 115. Restic treats 507 as permanent for the current command, allowing Backrest to record the plan as waiting for the next upload window instead of retrying the same rejected pack for hours. Repository
 metadata such as locks, indexes, and snapshots remains outside this data-pack
 allowance so a completed upload can publish its snapshot and remove its lock.
 
@@ -124,12 +124,22 @@ A task that completes can release its unused daily allocation through
 that remainder, while global and repository daily/monthly limits remain final
 bounds.
 
-At a daily or monthly limit, a data pack that cannot fit returns HTTP `429`
+At a daily or monthly limit, a data pack that cannot fit returns HTTP `507`
 before a provider request. Backrest can run the plan again after the next daily
 period. Objects that already completed
 remain valid Restic objects; a later backup reuses indexed data and uploads only
 missing content. Interrupted work may leave unreferenced packs, which a later
 `prune` removes.
+
+Restic object reads are isolated from ordinary OpenList downloads. If 115's
+download-link endpoint returns Alibaba Cloud's temporary 405 block page, the
+gateway pauses provider reads for that repository and returns HTTP 503 with a
+`Retry-After` value. The default cooldown is 30 minutes and can be changed with
+`restic.download_cooldown_minutes` or
+`RESTIC_DOWNLOAD_COOLDOWN_MINUTES`. At the end of the cooldown, only one
+request probes 115; successful recovery reopens the repository automatically.
+This prevents Restic's own retries from generating hundreds of additional 115
+requests while the provider is blocked.
 
 Administrator usage endpoint:
 

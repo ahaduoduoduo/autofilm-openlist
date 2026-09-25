@@ -41,7 +41,9 @@ var repositoryTypes = map[string]struct{}{
 
 var repositoryInventoryMu sync.Mutex
 
-type Handler struct{}
+type Handler struct {
+	downloadCircuit *downloadCircuit
+}
 
 type listEntry struct {
 	Name string `json:"name"`
@@ -76,7 +78,11 @@ type byteRange struct {
 }
 
 func NewHandler() *Handler {
-	return &Handler{}
+	cooldown := defaultDownloadCooldown
+	if conf.Conf != nil && conf.Conf.Restic.DownloadCooldownMinutes > 0 {
+		cooldown = time.Duration(conf.Conf.Restic.DownloadCooldownMinutes) * time.Minute
+	}
+	return &Handler{downloadCircuit: newDownloadCircuit(cooldown)}
 }
 
 func (h *Handler) Usage(c *gin.Context) {
@@ -379,7 +385,7 @@ func (h *Handler) handleObject(c *gin.Context, repository conf.ResticRepository,
 	case http.MethodHead:
 		h.headObject(c, objectPath)
 	case http.MethodGet:
-		h.getObject(c, objectPath, name)
+		h.getObject(c, repository.Name, objectPath, name)
 	case http.MethodPost:
 		h.putObject(c, repository, objectType, objectPath, name, task)
 	case http.MethodDelete:
@@ -414,10 +420,24 @@ func (h *Handler) headObject(c *gin.Context, objectPath string) {
 	c.Status(http.StatusOK)
 }
 
-func (h *Handler) getObject(c *gin.Context, objectPath, name string) {
+func (h *Handler) getObject(c *gin.Context, repositoryName, objectPath, name string) {
+	access := h.downloadCircuit.begin(repositoryName)
+	if !access.allowed {
+		writeDownloadUnavailable(c, access.retryAfter)
+		return
+	}
 	ctx := withMeta(c, objectPath)
 	link, object, err := fs.Link(ctx, objectPath, model.LinkArgs{Header: c.Request.Header})
 	if err != nil {
+		event := h.downloadCircuit.complete(repositoryName, access, err)
+		if event.blocked {
+			log.WithFields(log.Fields{
+				"repository": repositoryName,
+				"cooldown":   event.retryAfter.Round(time.Second),
+			}).Warn("paused Restic downloads after remote 405 response")
+			writeDownloadUnavailable(c, event.retryAfter)
+			return
+		}
 		writeStorageError(c, err)
 		return
 	}
@@ -428,12 +448,14 @@ func (h *Handler) getObject(c *gin.Context, objectPath, name string) {
 	}
 	requestedRange, err := parseRange(c.GetHeader("Range"), size)
 	if err != nil {
+		h.downloadCircuit.complete(repositoryName, access, nil)
 		c.Header("Content-Range", fmt.Sprintf("bytes */%d", size))
 		c.Status(http.StatusRequestedRangeNotSatisfiable)
 		return
 	}
 	rangeReader, err := stream.GetRangeReaderFromLink(size, link)
 	if err != nil {
+		h.downloadCircuit.complete(repositoryName, access, err)
 		writeStorageError(c, err)
 		return
 	}
@@ -448,8 +470,21 @@ func (h *Handler) getObject(c *gin.Context, objectPath, name string) {
 	}
 	reader, err := rangeReader.RangeRead(ctx, readRange)
 	if err != nil {
+		event := h.downloadCircuit.complete(repositoryName, access, err)
+		if event.blocked {
+			log.WithFields(log.Fields{
+				"repository": repositoryName,
+				"cooldown":   event.retryAfter.Round(time.Second),
+			}).Warn("paused Restic downloads after remote 405 response")
+			writeDownloadUnavailable(c, event.retryAfter)
+			return
+		}
 		writeStorageError(c, err)
 		return
+	}
+	event := h.downloadCircuit.complete(repositoryName, access, nil)
+	if event.recovered {
+		log.WithField("repository", repositoryName).Info("resumed Restic downloads after remote storage recovered")
 	}
 	defer reader.Close()
 	c.Header("Accept-Ranges", "bytes")
@@ -467,8 +502,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 	}
 	tracker, err := uploadTracker(repository.Name, objectType, c.Request.ContentLength, task)
 	if errors.Is(err, resticquota.ErrQuotaExceeded) {
-		c.Header("Retry-After", secondsUntilTomorrow())
-		c.String(http.StatusTooManyRequests, resticquota.ErrQuotaExceeded.Error())
+		writeQuotaExceeded(c)
 		return
 	}
 	if err != nil {
@@ -496,8 +530,7 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 	}
 	if err := fs.PutDirectly(ctx, directory, fileStream); err != nil {
 		if errors.Is(tracker.Err(), resticquota.ErrQuotaExceeded) {
-			c.Header("Retry-After", secondsUntilTomorrow())
-			c.String(http.StatusTooManyRequests, resticquota.ErrQuotaExceeded.Error())
+			writeQuotaExceeded(c)
 			return
 		}
 		writeStorageError(c, err)
@@ -523,6 +556,14 @@ func (h *Handler) putObject(c *gin.Context, repository conf.ResticRepository, ob
 		}).Error("failed to update Restic repository inventory after upload")
 	}
 	c.Status(http.StatusOK)
+}
+
+func writeQuotaExceeded(c *gin.Context) {
+	c.Header("Retry-After", secondsUntilTomorrow())
+	// Restic classifies 507 as permanent for the current command. Returning 429
+	// makes it retry an intentionally exhausted quota for hours. Backrest uses
+	// the response marker to convert this into the successful waiting state.
+	c.String(http.StatusInsufficientStorage, resticquota.ErrQuotaExceeded.Error())
 }
 
 func uploadTracker(repository, objectType string, size int64, task resticquota.TaskPolicy) (*resticquota.Tracker, error) {
@@ -626,8 +667,10 @@ func writeStorageError(c *gin.Context, err error) {
 
 func secondsUntilTomorrow() string {
 	location := time.Local
-	if configured, err := time.LoadLocation(conf.Conf.Restic.Timezone); err == nil {
-		location = configured
+	if conf.Conf != nil {
+		if configured, err := time.LoadLocation(conf.Conf.Restic.Timezone); err == nil {
+			location = configured
+		}
 	}
 	now := time.Now().In(location)
 	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, location)
