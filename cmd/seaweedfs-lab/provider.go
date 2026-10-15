@@ -32,6 +32,7 @@ type counters struct {
 	DownloadStarts      []int64 `json:"download_starts_ms"`
 }
 type controls struct {
+	BusyDownloads             int   `json:"busy_downloads"`
 	RequireEmptyUserAgent     bool  `json:"require_empty_user_agent"`
 	ExpireLinks               bool  `json:"expire_links"`
 	ExpiredStatus             int   `json:"expired_status"`
@@ -154,6 +155,10 @@ func (p *simulator) download(c *gin.Context) {
 	}
 	cors := !p.control.DisableCORS
 	status := p.control.CDNStatus
+	busy := p.control.BusyDownloads > 0
+	if busy {
+		p.control.BusyDownloads--
+	}
 	if c.Query("empty_ua") == "1" && c.GetHeader("User-Agent") != "" {
 		p.stats.UserAgentMismatches++
 		status = http.StatusForbidden
@@ -169,6 +174,10 @@ func (p *simulator) download(c *gin.Context) {
 		c.Header("Access-Control-Expose-Headers", "Content-Range, Content-Length")
 	}
 	defer func() { p.mu.Lock(); p.stats.ActiveDownloads--; p.mu.Unlock() }()
+	if busy {
+		c.JSON(http.StatusForbidden, gin.H{"status": 403, "message": "115 pmt 3-2"})
+		return
+	}
 	if delay > 0 {
 		timer := time.NewTimer(time.Duration(min(delay, 10000)) * time.Millisecond)
 		defer timer.Stop()
