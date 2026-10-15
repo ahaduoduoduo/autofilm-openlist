@@ -8,10 +8,10 @@ in small modules.
 ## Fork CI scope
 
 - `server/seaweedfs/`: independent exact-object gateway, upload receipts,
-  persistent pacing/cooldown and local inventory export/import.
+  persistent URL cache, new-link pacing/cooldown and local inventory export/import.
 - `drivers/115/tier.go`, `internal/driver/tier.go`: durable provider locators and
   opt-in upload context; uses the existing 115 account scheduler.
-- `internal/model/seaweedfs.go`, `internal/conf/seaweedfs.go`: receipt/gate tables
+- `internal/model/seaweedfs.go`, `internal/conf/seaweedfs.go`: receipt/link/gate tables
   and opt-in space configuration.
 - `cmd/seaweedfs-lab/`: separate loopback-only simulator executable; not included
   in OpenList's production routing.

@@ -19,7 +19,7 @@ func retry(c *gin.Context, status int, duration time.Duration) {
 }
 
 // Called with h.mu held. A reservation is persisted before provider access.
-func (h *Handler) reserveRead(c *gin.Context, account string) bool {
+func (h *Handler) reserveLink(c *gin.Context, account string) bool {
 	gate := model.SeaweedReadGate{Account: account}
 	err := h.db.First(&gate, "account = ?", account).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -68,7 +68,7 @@ func blockedError(err error) bool {
 }
 
 // Uploads share the persistent account cooldown, but use the driver's existing
-// upload pacing rather than consuming a download reservation.
+// upload pacing rather than consuming a new-link reservation.
 func (h *Handler) allowUpload(c *gin.Context, account string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -89,10 +89,17 @@ func (h *Handler) allowUpload(c *gin.Context, account string) bool {
 // report it, allowing the account-wide cooldown to include direct downloads.
 func (h *Handler) failure(c *gin.Context) {
 	var report struct {
-		Status int `json:"status"`
+		Status int    `json:"status"`
+		URL    string `json:"url,omitempty"`
 	}
 	if c.ShouldBindJSON(&report) != nil {
 		c.Status(400)
+		return
+	}
+	switch report.Status {
+	case 200, 206, 401, 403, 404, 405, 410, 429:
+	default:
+		c.Status(http.StatusBadRequest)
 		return
 	}
 	if _, ok := h.object(c); !ok {
@@ -104,10 +111,46 @@ func (h *Handler) failure(c *gin.Context) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.links, c.Param("space")+"/"+c.Param("key"))
+	var cached model.SeaweedLink
+	err := h.db.First(&cached, "space = ? AND key = ?", c.Param("space"), c.Param("key")).Error
+	// Ignore duplicate reports and reports for an old URL, including success
+	// from a transfer that started before that URL was invalidated.
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && (cached.Invalid || (report.URL != "" && cached.URL != report.URL))) {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	if err != nil {
+		c.Status(500)
+		return
+	}
+	if report.Status == 200 || report.Status == 206 {
+		if cached.Failures > 0 {
+			if err := h.db.Model(&cached).Update("failures", 0).Error; err != nil {
+				c.Status(500)
+				return
+			}
+		}
+		c.Status(http.StatusNoContent)
+		return
+	}
+	// Keep a tombstone so simultaneous failures of one URL neither extend
+	// cooldown repeatedly nor invalidate a replacement URL.
+	failures := cached.Failures + 1
+	if err := h.db.Model(&cached).Updates(map[string]any{"invalid": true, "failures": failures}).Error; err != nil {
+		c.Status(500)
+		return
+	}
 	switch report.Status {
-	case 403, 405, 429:
+	case 405, 429:
 		h.block(c, p.TierAccountKey())
+	case 403:
+		// An isolated 403 can simply mean URL expiry. A replacement URL that
+		// also fails (without a successful transfer) requires account cooldown.
+		if failures > 1 {
+			h.block(c, p.TierAccountKey())
+		} else {
+			c.Status(http.StatusNoContent)
+		}
 	default:
 		c.Status(http.StatusNoContent)
 	}

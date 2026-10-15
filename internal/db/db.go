@@ -27,6 +27,7 @@ func Init(d *gorm.DB) {
 		new(model.ResticRepositoryInventory),
 		new(model.SeaweedObject),
 		new(model.SeaweedReadGate),
+		new(model.SeaweedLink),
 	)
 	if err != nil {
 		log.Fatalf("failed migrate database: %s", err.Error())

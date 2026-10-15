@@ -151,7 +151,11 @@ func (h *Handler) remove(c *gin.Context) {
 		return
 	}
 	h.mu.Lock()
-	delete(h.links, o.Space+"/"+o.Key)
+	err := h.db.Delete(&model.SeaweedLink{}, "space = ? AND key = ?", o.Space, o.Key).Error
 	h.mu.Unlock()
+	if err != nil {
+		c.Status(500)
+		return
+	}
 	c.Status(http.StatusNoContent)
 }

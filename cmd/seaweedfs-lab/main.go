@@ -29,7 +29,7 @@ import (
 func main() {
 	listen := flag.String("listen", "127.0.0.1:18790", "loopback listen address")
 	dir := flag.String("dir", "", "required persistent lab directory")
-	interval := flag.Int64("read-interval-ms", 1000, "minimum interval between download starts")
+	interval := flag.Int64("read-interval-ms", 1000, "minimum interval between new link API requests")
 	flag.Parse()
 	host, _, err := net.SplitHostPort(*listen)
 	if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() || *dir == "" {
@@ -42,7 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.SeaweedObject{}, &model.SeaweedReadGate{}); err != nil {
+	if err := database.AutoMigrate(&model.SeaweedObject{}, &model.SeaweedReadGate{}, &model.SeaweedLink{}); err != nil {
 		log.Fatal(err)
 	}
 	sqlDB, err := database.DB()
@@ -78,6 +78,13 @@ func main() {
 		}
 		p.mu.Lock()
 		p.control = control
+		if control.ExpireLinks {
+			p.rejectBefore = time.Now().UnixNano()
+			p.expiredStatus = control.ExpiredStatus
+			if p.expiredStatus == 0 {
+				p.expiredStatus = http.StatusGone
+			}
+		}
 		p.mu.Unlock()
 		c.Status(204)
 	})

@@ -19,9 +19,22 @@ type SeaweedObject struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// SeaweedReadGate survives a restart, so restart cannot clear a provider ban.
+// SeaweedReadGate persists the new-link request budget and provider cooldown.
+// NextReadAt is the next permitted link resolution, not a CDN download time.
 type SeaweedReadGate struct {
 	Account      string `gorm:"primaryKey;size:128"`
 	NextReadAt   time.Time
 	BlockedUntil time.Time
+}
+
+// SeaweedLink stores reusable URLs independently of data-transfer sessions.
+// Link requests, not CDN transfers, consume the persistent account budget.
+type SeaweedLink struct {
+	Space     string `gorm:"primaryKey;size:128"`
+	Key       string `gorm:"primaryKey;size:64"`
+	Account   string `gorm:"size:128"`
+	URL       string `gorm:"type:text"`
+	Invalid   bool
+	Failures  int
+	ExpiresAt time.Time `gorm:"index"`
 }

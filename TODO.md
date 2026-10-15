@@ -4,11 +4,13 @@ Updated: 2026-10-15
 
 ## Completed
 
+- [x] 2026-10-15: Persist reusable download URLs, pace only new link requests, and recover unknown URL expiry with deduplicated failure reports.
+
 - [x] 2026-10-15: Support Vault encrypted checkpoints with exact receipt reads and
   idempotent identical receipt imports; add configurable CORS to the local simulator.
 
 - [x] 2026-10-15: Add an opt-in SeaweedFS exact-object gateway, persistent receipts,
-  per-account download spacing/cooldown, isolated business directories, and a
+  per-account new-link spacing/cooldown, isolated business directories, and a
   loopback 115 simulator for real SeaweedFS integration tests.
 
 - [x] 2026-09-25: Remove the inherited full-platform beta release and Gitee
@@ -110,5 +112,4 @@ Updated: 2026-10-15
 - [ ] Display `/api/admin/restic/usage` in the customized Backrest console.
 - [ ] Add metrics for provider latency, throttling, and authentication failures.
 - [ ] Verify QR login and upload behavior against a dedicated 115 test account.
-- [ ] 2026-10-15: Add coordinated encrypted checkpoints and retention-aware
-  physical reclamation before production use of the new tier.
+- [ ] 2026-10-15: Add retention-aware physical reclamation before production use of the new tier.

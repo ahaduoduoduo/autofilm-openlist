@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,16 +19,21 @@ import (
 )
 
 type counters struct {
-	Uploads            int     `json:"uploads"`
-	Links              int     `json:"links"`
-	Downloads          int     `json:"downloads"`
-	Lists              int     `json:"lists"`
-	CredentialLeaks    int     `json:"credential_leaks"`
-	ActiveDownloads    int     `json:"active_downloads"`
-	MaxActiveDownloads int     `json:"max_active_downloads"`
-	DownloadStarts     []int64 `json:"download_starts_ms"`
+	Uploads             int     `json:"uploads"`
+	Links               int     `json:"links"`
+	Downloads           int     `json:"downloads"`
+	SuccessfulDownloads int     `json:"successful_downloads"`
+	Lists               int     `json:"lists"`
+	CredentialLeaks     int     `json:"credential_leaks"`
+	ActiveDownloads     int     `json:"active_downloads"`
+	MaxActiveDownloads  int     `json:"max_active_downloads"`
+	LinkRequestStarts   []int64 `json:"link_request_starts_ms"`
+	DownloadStarts      []int64 `json:"download_starts_ms"`
 }
 type controls struct {
+	ExpireLinks               bool  `json:"expire_links"`
+	ExpiredStatus             int   `json:"expired_status"`
+	LinkTTLMilliseconds       int64 `json:"link_ttl_ms"`
 	DisableCORS               bool  `json:"disable_cors"`
 	FailUpload                bool  `json:"fail_upload"`
 	LoseUploadReceipt         bool  `json:"lose_upload_receipt"`
@@ -44,10 +50,12 @@ type locator struct {
 // explicitly rejected: the production gateway must use durable exact locators.
 type simulator struct {
 	driver.Driver
-	mu         sync.Mutex
-	root, base string
-	stats      counters
-	control    controls
+	mu            sync.Mutex
+	root, base    string
+	stats         counters
+	control       controls
+	rejectBefore  int64
+	expiredStatus int
 }
 
 func (p *simulator) GetStorage() *model.Storage { return &model.Storage{ID: 1, MountPath: "/fake115"} }
@@ -102,6 +110,8 @@ func (p *simulator) TierPut(ctx context.Context, parent string, file model.FileS
 func (p *simulator) TierLink(ctx context.Context, data json.RawMessage) (*model.Link, error) {
 	p.mu.Lock()
 	p.stats.Links++
+	p.stats.LinkRequestStarts = append(p.stats.LinkRequestStarts, time.Now().UnixMilli())
+	ttl := time.Duration(p.control.LinkTTLMilliseconds) * time.Millisecond
 	blocked := p.control.BlockLink
 	p.mu.Unlock()
 	if blocked {
@@ -114,7 +124,11 @@ func (p *simulator) TierLink(ctx context.Context, data json.RawMessage) (*model.
 	if !safeName(l.Parent) || !safeName(l.Name) {
 		return nil, fmt.Errorf("invalid locator")
 	}
-	return &model.Link{URL: p.base + "/cdn/" + l.Parent + "/" + l.Name}, nil
+	link := &model.Link{URL: p.base + "/cdn/" + l.Parent + "/" + l.Name + "?issued=" + strconv.FormatInt(time.Now().UnixNano(), 10)}
+	if ttl > 0 {
+		link.Expiration = &ttl
+	}
+	return link, nil
 }
 func (p *simulator) TierRemove(context.Context, json.RawMessage) error {
 	return fmt.Errorf("physical removal is not part of the online protocol")
@@ -133,6 +147,10 @@ func (p *simulator) download(c *gin.Context) {
 	}
 	cors := !p.control.DisableCORS
 	status := p.control.CDNStatus
+	issued, _ := strconv.ParseInt(c.Query("issued"), 10, 64)
+	if status == 0 && issued < p.rejectBefore {
+		status = p.expiredStatus
+	}
 	delay := p.control.DownloadDelayMilliseconds
 	p.mu.Unlock()
 	if cors {
@@ -170,4 +188,9 @@ func (p *simulator) download(c *gin.Context) {
 		return
 	}
 	http.ServeContent(c.Writer, c.Request, name, st.ModTime(), f)
+	if c.Writer.Status() == http.StatusOK || c.Writer.Status() == http.StatusPartialContent {
+		p.mu.Lock()
+		p.stats.SuccessfulDownloads++
+		p.mu.Unlock()
+	}
 }

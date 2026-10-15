@@ -7,7 +7,6 @@ type SeaweedFS struct {
 	MaxObjectMiB             int64            `json:"max_object_mib" env:"MAX_OBJECT_MIB"`
 	ReadIntervalMilliseconds int64            `json:"read_interval_ms" env:"READ_INTERVAL_MS"`
 	CooldownSeconds          int64            `json:"cooldown_seconds" env:"COOLDOWN_SECONDS"`
-	LinkCacheSeconds         int64            `json:"link_cache_seconds" env:"LINK_CACHE_SECONDS"`
 	Spaces                   []SeaweedFSSpace `json:"spaces"`
 }
 

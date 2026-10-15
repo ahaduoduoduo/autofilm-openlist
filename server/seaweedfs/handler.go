@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
@@ -24,11 +22,6 @@ import (
 
 type Resolver func(string) (driver.Driver, error)
 
-type cachedLink struct {
-	url     string
-	expires time.Time
-}
-
 type Handler struct {
 	config  conf.SeaweedFS
 	db      *gorm.DB
@@ -36,7 +29,6 @@ type Handler struct {
 	spaces  map[string]conf.SeaweedFSSpace
 	uploads chan struct{}
 	mu      sync.Mutex
-	links   map[string]cachedLink
 }
 
 var spaceName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -51,13 +43,10 @@ func NewHandler(config conf.SeaweedFS, database *gorm.DB, resolve Resolver) (*Ha
 	if config.CooldownSeconds == 0 {
 		config.CooldownSeconds = 1800
 	}
-	if config.LinkCacheSeconds == 0 {
-		config.LinkCacheSeconds = 300
-	}
-	if config.MaxObjectMiB < 1 || config.MaxObjectMiB > 4096 || config.ReadIntervalMilliseconds < 1 || config.CooldownSeconds < 1 || config.LinkCacheSeconds < 1 {
+	if config.MaxObjectMiB < 1 || config.MaxObjectMiB > 4096 || config.ReadIntervalMilliseconds < 1 || config.CooldownSeconds < 1 {
 		return nil, fmt.Errorf("invalid SeaweedFS size or timing limits")
 	}
-	h := &Handler{config: config, db: database, resolve: resolve, spaces: map[string]conf.SeaweedFSSpace{}, uploads: make(chan struct{}, 1), links: map[string]cachedLink{}}
+	h := &Handler{config: config, db: database, resolve: resolve, spaces: map[string]conf.SeaweedFSSpace{}, uploads: make(chan struct{}, 1)}
 	parents := map[string]bool{}
 	for _, s := range config.Spaces {
 		parent := s.MountPath + "\x00" + s.ParentID
@@ -183,47 +172,18 @@ func (h *Handler) read(c *gin.Context) {
 		c.Status(http.StatusConflict)
 		return
 	}
-	// Serializes link resolution and persistent read reservations across spaces.
+	// Only a cache miss may ask the provider for a new URL. Cached URLs can
+	// be reused during the pacing interval and across concurrent downloads.
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !h.reserveRead(c, p.TierAccountKey()) {
+	link, ok := h.cachedOrResolve(c, o, p)
+	if !ok {
 		return
 	}
-	cacheKey := o.Space + "/" + o.Key
-	link := h.links[cacheKey]
-	if time.Now().After(link.expires) {
-		resolved, err := p.TierLink(c.Request.Context(), []byte(o.Locator))
-		if err != nil {
-			if blockedError(err) {
-				h.block(c, p.TierAccountKey())
-				return
-			}
-			c.Header("Retry-After", "5")
-			c.Status(http.StatusBadGateway)
-			return
-		}
-		if resolved == nil {
-			c.Status(http.StatusBadGateway)
-			return
-		}
-		defer resolved.Close()
-		u, err := url.Parse(resolved.URL)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
-			c.Status(http.StatusBadGateway)
-			return
-		}
-		ttl := time.Duration(h.config.LinkCacheSeconds) * time.Second
-		if resolved.Expiration != nil && *resolved.Expiration > 0 && *resolved.Expiration < ttl {
-			ttl = *resolved.Expiration
-		}
-		link = cachedLink{url: resolved.URL, expires: time.Now().Add(ttl)}
-		// Bound memory independently of repository size.
-		if len(h.links) >= 1024 {
-			clear(h.links)
-		}
-		h.links[cacheKey] = link
+	if !link.ExpiresAt.IsZero() {
+		c.Header("X-SeaweedFS-Link-Expires-At", strconv.FormatInt(link.ExpiresAt.Unix(), 10))
 	}
-	c.Redirect(http.StatusFound, link.url)
+	c.Redirect(http.StatusFound, link.URL)
 }
 
 func (h *Handler) list(c *gin.Context) {

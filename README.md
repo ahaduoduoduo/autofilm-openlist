@@ -172,8 +172,9 @@ Configuration and behavior details are in
 ## SeaweedFS cold tier
 
 This fork also provides an opt-in, exact-object SeaweedFS gateway for encrypted
-115 packs: persistent upload receipts, 302 downloads, account download pacing,
-and restart-persistent cooldowns without remote directory enumeration.
+115 packs: persistent upload receipts and reusable download URLs, paced link
+refresh, concurrent CDN transfers and restart-persistent cooldowns without
+remote directory enumeration.
 See [configuration, consistency and local simulator tests](docs/seaweedfs-tier.md).
 
 ## AutoFilm integration
