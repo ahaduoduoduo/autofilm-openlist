@@ -3,6 +3,7 @@ package seaweedfs
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -66,12 +67,16 @@ func (h *Handler) importInventory(c *gin.Context) {
 	defer func() { <-h.uploads }()
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		for _, o := range input.Objects {
-			var count int64
-			if err := tx.Model(&model.SeaweedObject{}).Where("space = ? AND key = ?", o.Space, o.Key).Count(&count).Error; err != nil {
-				return err
+			var existing model.SeaweedObject
+			err := tx.Where("space = ? AND key = ?", o.Space, o.Key).Take(&existing).Error
+			if err == nil {
+				if existing.State != o.State || existing.Size != o.Size || existing.Locator != o.Locator || existing.MountPath != o.MountPath || existing.ParentID != o.ParentID || existing.StorageID != o.StorageID {
+					return fmt.Errorf("restore would overwrite existing receipt")
+				}
+				continue // an identical retry is already committed
 			}
-			if count != 0 {
-				return fmt.Errorf("restore would overwrite existing receipt")
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
 			}
 			if err := tx.Create(&o).Error; err != nil {
 				return err

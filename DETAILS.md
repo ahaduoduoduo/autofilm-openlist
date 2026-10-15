@@ -135,3 +135,5 @@ in small modules.
 
 The AutoFilm protocol and failure semantics are documented in
 `docs/autofilm-remote-api.md`.
+
+- SeaweedFS gateway `/receipts/:key`: exact local receipt access for encrypted Vault checkpoints. Inventory import accepts identical retries without replacing different receipts.

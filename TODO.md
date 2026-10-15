@@ -4,6 +4,9 @@ Updated: 2026-10-15
 
 ## Completed
 
+- [x] 2026-10-15: Support Vault encrypted checkpoints with exact receipt reads and
+  idempotent identical receipt imports; add configurable CORS to the local simulator.
+
 - [x] 2026-10-15: Add an opt-in SeaweedFS exact-object gateway, persistent receipts,
   per-account download spacing/cooldown, isolated business directories, and a
   loopback 115 simulator for real SeaweedFS integration tests.

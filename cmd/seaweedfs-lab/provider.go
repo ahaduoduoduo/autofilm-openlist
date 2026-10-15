@@ -28,6 +28,7 @@ type counters struct {
 	DownloadStarts     []int64 `json:"download_starts_ms"`
 }
 type controls struct {
+	DisableCORS               bool  `json:"disable_cors"`
 	FailUpload                bool  `json:"fail_upload"`
 	LoseUploadReceipt         bool  `json:"lose_upload_receipt"`
 	CDNStatus                 int   `json:"cdn_status"`
@@ -130,9 +131,14 @@ func (p *simulator) download(c *gin.Context) {
 	if c.GetHeader("Authorization") != "" {
 		p.stats.CredentialLeaks++
 	}
+	cors := !p.control.DisableCORS
 	status := p.control.CDNStatus
 	delay := p.control.DownloadDelayMilliseconds
 	p.mu.Unlock()
+	if cors {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Expose-Headers", "Content-Range, Content-Length")
+	}
 	defer func() { p.mu.Lock(); p.stats.ActiveDownloads--; p.mu.Unlock() }()
 	if delay > 0 {
 		timer := time.NewTimer(time.Duration(min(delay, 10000)) * time.Millisecond)

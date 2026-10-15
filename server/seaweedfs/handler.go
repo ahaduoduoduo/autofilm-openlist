@@ -83,6 +83,16 @@ func (h *Handler) Register(g *gin.RouterGroup) {
 	g.POST("/:space/objects/:key/failure", h.failure)
 	g.GET("/:space/inventory", h.exportInventory)
 	g.POST("/:space/inventory", h.importInventory)
+	g.GET("/:space/receipts/:key", h.receipt)
+}
+
+// Service-only exact receipt lookup lets encrypted checkpoints carry their
+// bootstrap locators without enumerating either the provider or local catalog.
+func (h *Handler) receipt(c *gin.Context) {
+	o, ok := h.object(c)
+	if ok {
+		c.JSON(http.StatusOK, o)
+	}
 }
 
 func (h *Handler) authenticate(c *gin.Context) {
