@@ -1,11 +1,21 @@
 # Custom OpenList module map
 
-Updated: 2026-09-25
+Updated: 2026-10-15
 
 The upstream OpenList structure is unchanged. Custom responsibilities are kept
 in small modules.
 
 ## Fork CI scope
+
+- `server/seaweedfs/`: independent exact-object gateway, upload receipts,
+  persistent pacing/cooldown and local inventory export/import.
+- `drivers/115/tier.go`, `internal/driver/tier.go`: durable provider locators and
+  opt-in upload context; uses the existing 115 account scheduler.
+- `internal/model/seaweedfs.go`, `internal/conf/seaweedfs.go`: receipt/gate tables
+  and opt-in space configuration.
+- `cmd/seaweedfs-lab/`: separate loopback-only simulator executable; not included
+  in OpenList's production routing.
+- [SeaweedFS protocol and configuration](docs/seaweedfs-tier.md).
 
 - `.github/workflows/build.yml`: pull-request and manually triggered tests for
   the customized OpenList components.

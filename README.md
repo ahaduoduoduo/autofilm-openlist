@@ -169,6 +169,13 @@ non-SHA-1 metadata is ignored and retains the normal streamed-copy fallback.
 Configuration and behavior details are in
 [docs/quark-open-115-rapid-transfer.md](docs/quark-open-115-rapid-transfer.md).
 
+## SeaweedFS cold tier
+
+This fork also provides an opt-in, exact-object SeaweedFS gateway for encrypted
+115 packs: persistent upload receipts, 302 downloads, account download pacing,
+and restart-persistent cooldowns without remote directory enumeration.
+See [configuration, consistency and local simulator tests](docs/seaweedfs-tier.md).
+
 ## AutoFilm integration
 
 This fork adds a credential-isolated API for Jellyfin-based remote media

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/resticquota"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 )
@@ -27,6 +28,8 @@ func TestShouldUseOrdinaryOSSUpload(t *testing.T) {
 		{name: "restic pack", ctx: resticContext, size: 20 * utils.MB, want: true},
 		{name: "restic at ordinary limit", ctx: resticContext, size: 64 * utils.MB, want: true},
 		{name: "restic above ordinary limit", ctx: resticContext, size: 64*utils.MB + 1, want: false},
+		{name: "tier at ordinary limit", ctx: driver.WithTierUpload(context.Background()), size: 64 * utils.MB, want: true},
+		{name: "tier above ordinary limit", ctx: driver.WithTierUpload(context.Background()), size: 64*utils.MB + 1, want: false},
 	}
 
 	for _, tt := range tests {

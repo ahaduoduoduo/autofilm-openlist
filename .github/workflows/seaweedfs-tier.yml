@@ -1,0 +1,34 @@
+name: SeaweedFS tier amd64
+on:
+  push:
+    branches: [codex/seaweedfs-tier]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: seaweedfs-tier-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.26.4'
+      - name: Test existing integrations and new gateway
+        run: go test ./drivers/115 ./drivers/quark_open ./internal/resticquota ./internal/db ./server/restic ./server/seaweedfs ./server/handles
+      - name: Build linux amd64 backend and simulator
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p build
+          go build -trimpath -o build/openlist .
+          go build -trimpath -o build/openlist-lab ./cmd/seaweedfs-lab
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openlist-seaweedfs-linux-amd64
+          path: build/
+          retention-days: 7

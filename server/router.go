@@ -42,6 +42,7 @@ func Init(e *gin.Engine) {
 	WebDav(g.Group("/dav"))
 	S3(g.Group("/s3"))
 	Restic(g.Group("/restic"))
+	SeaweedFS(g.Group("/seaweedfs/v1"))
 	MCP(g)
 
 	downloadLimiter := middlewares.DownloadRateLimiter(stream.ClientDownloadLimit)

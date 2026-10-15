@@ -23,7 +23,7 @@ const (
 
 func shouldUseOrdinaryOSSUpload(ctx context.Context, size int64) bool {
 	limit := ordinaryOSSUploadLimit
-	if resticquota.FromContext(ctx) != nil {
+	if resticquota.FromContext(ctx) != nil || driver.IsTierUpload(ctx) {
 		limit = resticOrdinaryOSSUploadLimit
 	}
 	return size <= limit

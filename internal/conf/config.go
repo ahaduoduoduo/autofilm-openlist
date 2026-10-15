@@ -154,6 +154,7 @@ type Config struct {
 	Cors                  Cors        `json:"cors" envPrefix:"CORS_"`
 	S3                    S3          `json:"s3" envPrefix:"S3_"`
 	Restic                Restic      `json:"restic" envPrefix:"RESTIC_"`
+	SeaweedFS             SeaweedFS   `json:"seaweedfs" envPrefix:"SEAWEEDFS_"`
 	FTP                   FTP         `json:"ftp" envPrefix:"FTP_"`
 	SFTP                  SFTP        `json:"sftp" envPrefix:"SFTP_"`
 	MCP                   MCP         `json:"mcp" envPrefix:"MCP_"`

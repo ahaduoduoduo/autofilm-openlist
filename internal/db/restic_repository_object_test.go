@@ -3,6 +3,7 @@ package db
 import (
 	"testing"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -10,6 +11,9 @@ import (
 )
 
 func TestResticRepositoryObjectInventory(t *testing.T) {
+	previous := conf.Conf
+	conf.Conf = &conf.Config{Database: conf.Database{Type: "sqlite3"}}
+	t.Cleanup(func() { conf.Conf = previous })
 	database, err := gorm.Open(sqlite.Open("file:restic-object-inventory?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	Init(database)
