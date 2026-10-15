@@ -30,11 +30,12 @@ type SeaweedReadGate struct {
 // SeaweedLink stores reusable URLs independently of data-transfer sessions.
 // Link requests, not CDN transfers, consume the persistent account budget.
 type SeaweedLink struct {
-	Space     string `gorm:"primaryKey;size:128"`
-	Key       string `gorm:"primaryKey;size:64"`
-	Account   string `gorm:"size:128"`
-	URL       string `gorm:"type:text"`
-	Invalid   bool
-	Failures  int
-	ExpiresAt time.Time `gorm:"index"`
+	Space             string `gorm:"primaryKey;size:128"`
+	Key               string `gorm:"primaryKey;size:64"`
+	Account           string `gorm:"size:128"`
+	URL               string `gorm:"type:text"`
+	DownloadUserAgent *string
+	Invalid           bool
+	Failures          int
+	ExpiresAt         time.Time `gorm:"index"`
 }

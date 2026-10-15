@@ -2,6 +2,13 @@
 
 更新时间：2026-10-15。
 
+2026-10-16 真实 DSM 验证补充：本接口调用的 115 下载 API 会为签名绑定申请时的
+User-Agent。接口统一申请空 User-Agent 链接，并通过
+`X-SeaweedFS-Download-User-Agent: ""`（JSON 字符串）声明这一下载条件。
+该条件与 URL 一起持久化。原生客户端必须显式发送空值，不能使用 HTTP 库默认值；
+浏览器无法控制此请求头时，Vault 使用复用原链接的密文中转，不重复申请链接。
+此规则仅作用于新适配接口，不改变 Jellyfin 和 Backrest 各自的下载处理。
+
 这是独立的 SeaweedFS 适配。接口前缀是 `/seaweedfs/v1`，默认关闭。
 现有 `/restic`、普通 `/d` 下载、Jellyfin 302、AutoFilm 和 115 登录逻辑沿用原有实现。
 

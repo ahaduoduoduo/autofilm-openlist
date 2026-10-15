@@ -62,7 +62,12 @@ func (h *Handler) cachedOrResolve(c *gin.Context, o *model.SeaweedObject, p driv
 	if cached.Account != account {
 		failures = 0
 	}
-	cached = model.SeaweedLink{Space: o.Space, Key: o.Key, Account: account, URL: resolved.URL, ExpiresAt: expires, Failures: failures}
+	var userAgent *string
+	if values, present := resolved.Header["User-Agent"]; present && len(values) > 0 {
+		value := values[0]
+		userAgent = &value
+	}
+	cached = model.SeaweedLink{Space: o.Space, Key: o.Key, Account: account, URL: resolved.URL, ExpiresAt: expires, Failures: failures, DownloadUserAgent: userAgent}
 	if err = h.db.Save(&cached).Error; err != nil {
 		c.Status(500)
 		return cached, false

@@ -183,6 +183,10 @@ func (h *Handler) read(c *gin.Context) {
 	if !link.ExpiresAt.IsZero() {
 		c.Header("X-SeaweedFS-Link-Expires-At", strconv.FormatInt(link.ExpiresAt.Unix(), 10))
 	}
+	if link.DownloadUserAgent != nil {
+		// JSON preserves the difference between an explicitly empty UA and no constraint.
+		c.Header("X-SeaweedFS-Download-User-Agent", strconv.Quote(*link.DownloadUserAgent))
+	}
 	c.Redirect(http.StatusFound, link.URL)
 }
 

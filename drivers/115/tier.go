@@ -38,7 +38,16 @@ func (d *Pan115) TierLink(ctx context.Context, locator json.RawMessage) (*model.
 	if err != nil {
 		return nil, err
 	}
-	return d.Link(ctx, obj, model.LinkArgs{})
+	link, err := d.Link(ctx, obj, model.LinkArgs{})
+	if err == nil && link != nil {
+		if link.Header == nil {
+			link.Header = make(map[string][]string)
+		}
+		// This exact-object endpoint requests one canonical empty-UA URL per pack.
+		// Native clients must not replace it with their HTTP library's default UA.
+		link.Header.Set("User-Agent", "")
+	}
+	return link, err
 }
 
 func (d *Pan115) TierRemove(ctx context.Context, locator json.RawMessage) error {

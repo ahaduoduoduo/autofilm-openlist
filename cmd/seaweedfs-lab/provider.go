@@ -25,12 +25,14 @@ type counters struct {
 	SuccessfulDownloads int     `json:"successful_downloads"`
 	Lists               int     `json:"lists"`
 	CredentialLeaks     int     `json:"credential_leaks"`
+	UserAgentMismatches int     `json:"user_agent_mismatches"`
 	ActiveDownloads     int     `json:"active_downloads"`
 	MaxActiveDownloads  int     `json:"max_active_downloads"`
 	LinkRequestStarts   []int64 `json:"link_request_starts_ms"`
 	DownloadStarts      []int64 `json:"download_starts_ms"`
 }
 type controls struct {
+	RequireEmptyUserAgent     bool  `json:"require_empty_user_agent"`
 	ExpireLinks               bool  `json:"expire_links"`
 	ExpiredStatus             int   `json:"expired_status"`
 	LinkTTLMilliseconds       int64 `json:"link_ttl_ms"`
@@ -113,6 +115,7 @@ func (p *simulator) TierLink(ctx context.Context, data json.RawMessage) (*model.
 	p.stats.LinkRequestStarts = append(p.stats.LinkRequestStarts, time.Now().UnixMilli())
 	ttl := time.Duration(p.control.LinkTTLMilliseconds) * time.Millisecond
 	blocked := p.control.BlockLink
+	requireEmptyUA := p.control.RequireEmptyUserAgent
 	p.mu.Unlock()
 	if blocked {
 		return nil, fmt.Errorf("request has been blocked")
@@ -125,6 +128,10 @@ func (p *simulator) TierLink(ctx context.Context, data json.RawMessage) (*model.
 		return nil, fmt.Errorf("invalid locator")
 	}
 	link := &model.Link{URL: p.base + "/cdn/" + l.Parent + "/" + l.Name + "?issued=" + strconv.FormatInt(time.Now().UnixNano(), 10)}
+	if requireEmptyUA {
+		link.URL += "&empty_ua=1"
+		link.Header = http.Header{"User-Agent": {""}}
+	}
 	if ttl > 0 {
 		link.Expiration = &ttl
 	}
@@ -147,6 +154,10 @@ func (p *simulator) download(c *gin.Context) {
 	}
 	cors := !p.control.DisableCORS
 	status := p.control.CDNStatus
+	if c.Query("empty_ua") == "1" && c.GetHeader("User-Agent") != "" {
+		p.stats.UserAgentMismatches++
+		status = http.StatusForbidden
+	}
 	issued, _ := strconv.ParseInt(c.Query("issued"), 10, 64)
 	if status == 0 && issued < p.rejectBefore {
 		status = p.expiredStatus
